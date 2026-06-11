@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ONE DOT</string>
+    <string name="title_activity_main">ONE DOT</string>
+    <string name="package_name">com.nikita.onedot</string>
+    <string name="custom_url_scheme">com.nikita.onedot</string>
+</resources>

@@ -1,0 +1,18 @@
+{
+  "name": "one-dot",
+  "version": "1.0.0",
+  "description": "ONE DOT - a minimalist rhythm game for your ears",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap open android",
+    "build:android": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/core": "^8.4.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.0"
+  }
+}

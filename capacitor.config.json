@@ -1,0 +1,10 @@
+{
+  "appId": "com.nikita.onedot",
+  "appName": "ONE DOT",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "android": {
+    "backgroundColor": "#000000",
+    "allowMixedContent": false
+  }
+}
