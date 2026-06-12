@@ -19,6 +19,13 @@ const Game = (() => {
   const MAX_PARTICLES = 400;
   const POINTS = { perfectStrong: 250, goodStrong: 100, weakOrb: 75 };
   const MIC_TOLERANCE = 0.15;
+  // Vocal orb vertical placement: spectral centroid (Hz) -> height above ground (px)
+  const ORB_CENTROID_MIN = 500;
+  const ORB_CENTROID_MAX = 2200;
+  const ORB_HEIGHT_MIN = 50;
+  const ORB_HEIGHT_MAX = 170;
+  // Ceiling bar bottom edge clears a grounded dot but reaches into the jump arc
+  const CEILING_BAR_WIDTH = 50;
 
   const SECTION_COLORS = {
     intro: { r: 106, g: 141, b: 255 },
@@ -653,6 +660,9 @@ const Game = (() => {
     for (let i = session.trackIndex; i < session.track.length; i++) {
       const el = session.track[i];
       if (el.hit || el.dissolved) continue;
+      // Ceiling bars are resolved passively by processTrack (grounded vs
+      // airborne at el.time), never as a tap-timing target.
+      if (el.type === 'ceiling') continue;
       if (typeFilter && el.type !== typeFilter) continue;
       if (el.time - adjusted > session.windows.good + 0.05) break;
       const dist = Math.abs(adjusted - el.time);
@@ -987,7 +997,13 @@ const Game = (() => {
       const glow = clamp(1 - Math.abs(songTime - el.time) / 0.3, 0, 1);
 
       if (el.type === 'weak') {
-        const oy = groundY - 70;
+        let oy;
+        if (el.centroid != null) {
+          const ct = clamp((el.centroid - ORB_CENTROID_MIN) / (ORB_CENTROID_MAX - ORB_CENTROID_MIN), 0, 1);
+          oy = groundY - (ORB_HEIGHT_MIN + ct * (ORB_HEIGHT_MAX - ORB_HEIGHT_MIN));
+        } else {
+          oy = groundY - 70;
+        }
         const r = 10 + glow * 4;
         ctx.globalAlpha = alpha;
         ctx.beginPath();
@@ -996,6 +1012,22 @@ const Game = (() => {
         ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
         ctx.shadowBlur = 12 + glow * 16;
         ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+      } else if (el.type === 'ceiling') {
+        const barBottom = groundY - DOT_RADIUS * 2 - height * JUMP_HEIGHT_RATIO * 0.5;
+        const edgeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.9)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = el.hitType === 'miss' ? 'rgba(120,0,0,0.85)' : 'rgba(5,6,10,0.92)';
+        ctx.fillRect(screenX - CEILING_BAR_WIDTH / 2, 0, CEILING_BAR_WIDTH, barBottom);
+        ctx.strokeStyle = edgeColor;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
+        ctx.shadowBlur = 8 + glow * 20;
+        ctx.beginPath();
+        ctx.moveTo(screenX - CEILING_BAR_WIDTH / 2, barBottom);
+        ctx.lineTo(screenX + CEILING_BAR_WIDTH / 2, barBottom);
+        ctx.stroke();
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1;
       } else {

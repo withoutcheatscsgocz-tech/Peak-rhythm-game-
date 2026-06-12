@@ -412,6 +412,22 @@ input[type="range"] {
   background: rgba(255,255,255,0.03); border: 1px solid var(--accent-dim); border-radius: 6px;
   margin-bottom: 12px;
 }
+.tuner-canvas-3band { height: 168px; }
+
+.tuner-band { padding: 12px 16px; }
+.tuner-band-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; letter-spacing: 2px; font-size: 12px;
+}
+.tuner-band-header .btn {
+  margin-top: 0; padding: 6px 12px; font-size: 10px;
+}
+.tuner-band-bass .tuner-band-label { color: #ff785a; text-shadow: 0 0 6px #ff785a; }
+.tuner-band-bass .tuner-band-header .btn { border-color: #ff785a; color: #ff785a; }
+.tuner-band-vocal .tuner-band-label { color: #ffd24d; text-shadow: 0 0 6px #ffd24d; }
+.tuner-band-vocal .tuner-band-header .btn { border-color: #ffd24d; color: #ffd24d; }
+.tuner-band-high .tuner-band-label { color: #6ee0ff; text-shadow: 0 0 6px #6ee0ff; }
+.tuner-band-high .tuner-band-header .btn { border-color: #6ee0ff; color: #6ee0ff; }
 
 /* ============================================================
    Mic calibration

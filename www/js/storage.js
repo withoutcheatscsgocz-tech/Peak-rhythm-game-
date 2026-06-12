@@ -71,7 +71,7 @@ const Storage = (() => {
       },
       leaderboards: {}, // hash -> [ {score, perfectRate, maxCombo, modifiers, date, fileName} ]
       endlessLeaderboard: [], // [ {score, songsSurvived, totalTime, date} ]
-      tunerSettings: {}, // hash -> { sensitivity, minSpacing, bassEmphasis }
+      tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing}, vocal:{...}, high:{...} }
     };
   }
 
@@ -262,7 +262,7 @@ const Storage = (() => {
 
   // ---------------- tuner settings ----------------
   function getTunerSettings(hash) {
-    return load().tunerSettings[hash] || { sensitivity: 1.3, minSpacing: 0.22, bassEmphasis: 0.6 };
+    return AudioEngine.normalizeTunerSettings(load().tunerSettings[hash]);
   }
   function setTunerSettings(hash, settings) {
     load().tunerSettings[hash] = settings;

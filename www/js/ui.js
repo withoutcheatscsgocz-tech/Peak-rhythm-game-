@@ -199,71 +199,97 @@ const UI = (() => {
 
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-  // ---------------- beat tuner ----------------
+  // ---------------- beat tuner (3-band: bass / vocal / high) ----------------
+  const TUNER_BANDS = ['bass', 'vocal', 'high'];
+  const TUNER_BAND_COLORS = {
+    bass: 'rgba(255,120,90,0.9)',
+    vocal: 'rgba(255,210,77,0.9)',
+    high: 'rgba(110,224,255,0.9)',
+  };
+
   function initTuner(songHash, analysis) {
     const t = Storage.getTunerSettings(songHash);
-    $('tuner-sens').value = t.sensitivity;
-    $('tuner-sens-val').textContent = t.sensitivity.toFixed(2);
-    $('tuner-spacing').value = Math.round(t.minSpacing * 1000);
-    $('tuner-spacing-val').textContent = `${Math.round(t.minSpacing * 1000)}ms`;
-    $('tuner-bass').value = t.bassEmphasis;
-    $('tuner-bass-val').textContent = t.bassEmphasis.toFixed(2);
+    TUNER_BANDS.forEach((band) => {
+      $(`tuner-${band}-sens`).value = t[band].sensitivity;
+      $(`tuner-${band}-sens-val`).textContent = t[band].sensitivity.toFixed(2);
+      $(`tuner-${band}-spacing`).value = Math.round(t[band].minSpacing * 1000);
+      $(`tuner-${band}-spacing-val`).textContent = `${Math.round(t[band].minSpacing * 1000)}ms`;
+    });
     drawTunerCanvas(analysis);
   }
 
   function readTunerSliders() {
-    return {
-      sensitivity: parseFloat($('tuner-sens').value),
-      minSpacing: parseInt($('tuner-spacing').value, 10) / 1000,
-      bassEmphasis: parseFloat($('tuner-bass').value),
-    };
+    const out = {};
+    TUNER_BANDS.forEach((band) => {
+      out[band] = {
+        sensitivity: parseFloat($(`tuner-${band}-sens`).value),
+        minSpacing: parseInt($(`tuner-${band}-spacing`).value, 10) / 1000,
+      };
+    });
+    return out;
   }
 
   function bindTunerSliders() {
-    $('tuner-sens').addEventListener('input', () => {
-      $('tuner-sens-val').textContent = parseFloat($('tuner-sens').value).toFixed(2);
-    });
-    $('tuner-spacing').addEventListener('input', () => {
-      $('tuner-spacing-val').textContent = `${$('tuner-spacing').value}ms`;
-    });
-    $('tuner-bass').addEventListener('input', () => {
-      $('tuner-bass-val').textContent = parseFloat($('tuner-bass').value).toFixed(2);
+    TUNER_BANDS.forEach((band) => {
+      $(`tuner-${band}-sens`).addEventListener('input', () => {
+        $(`tuner-${band}-sens-val`).textContent = parseFloat($(`tuner-${band}-sens`).value).toFixed(2);
+      });
+      $(`tuner-${band}-spacing`).addEventListener('input', () => {
+        $(`tuner-${band}-spacing-val`).textContent = `${$(`tuner-${band}-spacing`).value}ms`;
+      });
     });
   }
 
   function drawTunerCanvas(analysis) {
     const canvas = $('tuner-canvas');
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = canvas.clientWidth || 320, h = canvas.clientHeight || 120;
+    const w = canvas.clientWidth || 320, h = canvas.clientHeight || 180;
     canvas.width = w * dpr; canvas.height = h * dpr;
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
     const wave = analysis.waveform || [];
-    const mid = h / 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    const waveMid = h / 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let i = 0; i < wave.length; i++) {
       const x = (i / wave.length) * w;
-      const amp = wave[i] * mid;
-      ctx.moveTo(x, mid - amp);
-      ctx.lineTo(x, mid + amp);
+      const amp = wave[i] * waveMid;
+      ctx.moveTo(x, waveMid - amp);
+      ctx.lineTo(x, waveMid + amp);
     }
     ctx.stroke();
 
     const duration = analysis.duration || 1;
-    analysis.beats.forEach(b => {
-      const x = (b.time / duration) * w;
-      const isStrong = b.type === 'strong';
-      ctx.strokeStyle = isStrong ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
-      ctx.lineWidth = isStrong ? 2 : 1;
+    const laneH = h / 3;
+    const lanes = [
+      { beats: analysis.bassBeats || [], color: TUNER_BAND_COLORS.bass, lane: 0 },
+      { beats: analysis.vocalBeats || [], color: TUNER_BAND_COLORS.vocal, lane: 1 },
+      { beats: analysis.highBeats || [], color: TUNER_BAND_COLORS.high, lane: 2 },
+    ];
+    lanes.forEach(({ beats, color, lane }) => {
+      const top = lane * laneH;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x, isStrong ? 4 : h * 0.25);
-      ctx.lineTo(x, isStrong ? h - 4 : h * 0.75);
+      beats.forEach((b) => {
+        const x = (b.time / duration) * w;
+        ctx.moveTo(x, top + 2);
+        ctx.lineTo(x, top + laneH - 2);
+      });
       ctx.stroke();
     });
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, i * laneH);
+      ctx.lineTo(w, i * laneH);
+      ctx.stroke();
+    }
   }
 
   // ---------------- mic calibration ----------------
