@@ -53,6 +53,7 @@ const Storage = (() => {
         theme: 'default',
         skin: 'classic',
         listenEnabled: false,
+        debugLog: false,
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false },

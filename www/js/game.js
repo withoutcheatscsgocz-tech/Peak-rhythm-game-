@@ -414,12 +414,12 @@ const Game = (() => {
   function pause() {
     if (!running || isPaused) return;
     isPaused = true;
-    if (audioCtx && session.audioBuffer) audioCtx.suspend();
+    if (audioCtx) { try { audioCtx.suspend(); } catch (e) {} }
   }
 
   function resume() {
     if (!running || !isPaused) return;
-    if (audioCtx && session.audioBuffer) audioCtx.resume();
+    if (audioCtx) { try { audioCtx.resume(); } catch (e) {} }
     session.lastRealTime = audioCtx.currentTime;
     if (session.micActive) {
       const now = audioCtx.currentTime;
@@ -520,19 +520,28 @@ const Game = (() => {
     if (!running) return;
     rafId = requestAnimationFrame(loop);
     if (isPaused) return;
-    const realNow = audioCtx.currentTime;
-    let songTime;
-    if (realNow < session.hitStopUntilReal) {
-      songTime = session.frozenSongTime;
-    } else {
-      songTime = computeSongTime(realNow);
-    }
-    const dt = Math.min(0.05, Math.max(0, realNow - (session.lastRealTime || realNow)));
-    session.lastRealTime = realNow;
-    session.elapsedPlayTime += dt;
+    try {
+      const realNow = audioCtx.currentTime;
+      let songTime;
+      if (realNow < session.hitStopUntilReal) {
+        songTime = session.frozenSongTime;
+      } else {
+        songTime = computeSongTime(realNow);
+      }
+      const dt = Math.min(0.05, Math.max(0, realNow - (session.lastRealTime || realNow)));
+      session.lastRealTime = realNow;
+      session.elapsedPlayTime += dt;
 
-    update(songTime, realNow, dt);
-    render(songTime, realNow, dt);
+      update(songTime, realNow, dt);
+      render(songTime, realNow, dt);
+    } catch (err) {
+      // Stop the loop so a broken frame doesn't spam the same error 60x/sec -
+      // the error is surfaced via Game.onError instead of failing silently.
+      running = false;
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (Game.onError) Game.onError(err);
+    }
   }
 
   function update(songTime, realNow, dt) {
@@ -600,21 +609,42 @@ const Game = (() => {
         continue;
       }
 
+      if (el.type === 'ceiling' && !el.hit && songTime >= el.time) {
+        el.hit = true;
+        if (session.isJumping) {
+          el.hitType = 'miss';
+          const indexBefore = session.trackIndex;
+          registerMiss(el, songTime);
+          if (!running || session.completing || session.trackIndex !== indexBefore) return;
+        } else {
+          el.hitType = 'safe';
+          session.combo++;
+          session.maxCombo = Math.max(session.maxCombo, session.combo);
+          const points = Math.round(POINTS.weakOrb * getComboMultiplier());
+          session.baseScore += points;
+          session.score = Math.round(session.baseScore * session.multiplier);
+          addPopup(`+${points}`, dotX, session.dotY - 30, '#8fd0ff');
+        }
+      }
+
       if (songTime > el.time + goodWindow) {
         if (!el.hit) {
-          if (el.type === 'strong') registerMiss(el, songTime);
-          else el.dissolved = true;
+          if (el.type === 'strong') {
+            const indexBefore = session.trackIndex;
+            registerMiss(el, songTime);
+            // restartFromCheckpoint() may have rewound trackIndex (or ended the
+            // run); bail so the next frame recomputes from the fresh audio clock
+            // instead of continuing this loop with a stale songTime.
+            if (!running || session.completing || session.trackIndex !== indexBefore) return;
+          } else {
+            el.dissolved = true;
+          }
         }
         session.trackIndex++;
         continue;
       }
 
       break;
-    }
-
-    if (session.trackIndex > 300) {
-      session.track.splice(0, session.trackIndex - 50);
-      session.trackIndex = 50;
     }
   }
 
@@ -738,6 +768,8 @@ const Game = (() => {
     session.startOffset = offset;
     session.isJumping = false;
     session.hitStopUntilReal = 0;
+    session.ringIndex = 0;
+    session.nextClickIndex = 0;
   }
 
   function updatePracticeLoop(songTime) {

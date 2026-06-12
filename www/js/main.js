@@ -57,6 +57,7 @@ const App = (() => {
 
   // ---------------- bootstrap ----------------
   function init() {
+    bindErrorHandlers();
     Game.init($('game-canvas'), $('fx-canvas'));
     UI.init();
     bindGameCallbacks();
@@ -71,6 +72,19 @@ const App = (() => {
         $('listen-toggle').classList.remove('active');
       });
     }
+  }
+
+  // ---------------- global error capture (DEBUG LOG) ----------------
+  function bindErrorHandlers() {
+    window.addEventListener('error', (e) => {
+      const msg = e.error ? (e.error.stack || e.error.message) : e.message;
+      UI.logDebugError(`${msg} (${e.filename}:${e.lineno}:${e.colno})`);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      const reason = e.reason;
+      const msg = reason && reason.stack ? reason.stack : String(reason);
+      UI.logDebugError(`Unhandled rejection: ${msg}`);
+    });
   }
 
   // ---------------- global action dispatcher ----------------
@@ -124,8 +138,17 @@ const App = (() => {
       case 'settings':
         UI.showScreen('screen-settings');
         break;
+      case 'sync-test':
+        startSyncTest();
+        break;
       case 'toggle-listen':
         toggleListenMode();
+        break;
+      case 'debug-log-clear':
+        UI.clearDebugLog();
+        break;
+      case 'debug-log-close':
+        UI.hideDebugOverlay();
         break;
 
       // ---------------- navigation ----------------
@@ -313,6 +336,33 @@ const App = (() => {
     }
   }
 
+  // ---------------- sync test mode (settings) ----------------
+  async function startSyncTest() {
+    UI.showScreen('screen-analyzing', false);
+    $('analyzing-title').textContent = 'PREPARING SYNC TEST...';
+    $('analyze-file-name').textContent = '120 BPM CLICK TRACK';
+    $('analyze-pct').textContent = '';
+    try {
+      const { buffer, analysis } = await AudioEngine.generateClickTrack();
+      const levelData = Level.generate(analysis, 'synctest');
+      current.mode = 'synctest';
+      current.audioBuffer = buffer;
+      current.analysis = analysis;
+      current.levelData = levelData;
+      current.songHash = 'synctest';
+      current.songName = 'SYNC TEST 120 BPM';
+      // noFail keeps the test running uninterrupted for the full 32s so
+      // sync drift can be observed without checkpoint restarts.
+      await startCountdown({ modifiers: new Set(['noFail']) });
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not start sync test.');
+      UI.resetNav();
+      UI.showScreen('screen-settings', false);
+      resetSessionState();
+    }
+  }
+
   // ---------------- beat tuner ----------------
   function enterTuner() {
     if (UI.getCurrentScreen() === 'screen-pause') {
@@ -428,6 +478,16 @@ const App = (() => {
     };
     Game.onSongComplete = (result) => routeRunResult(result);
     Game.onGameOver = (result) => routeRunResult(result);
+    Game.onError = (err) => {
+      UI.logDebugError(`Game loop error: ${err && err.stack ? err.stack : err}`);
+      UI.showToast('SOMETHING WENT WRONG - RETURNING TO MENU');
+      Game.destroy();
+      UI.hideHUD();
+      UI.hidePlayerBanner();
+      UI.hideEndlessBanner();
+      UI.setReplayToastVisible(false);
+      resetToStart();
+    };
   }
 
   function routeRunResult(result) {
@@ -440,6 +500,13 @@ const App = (() => {
     if (current.mode === 'endless') { handleEndlessSegmentComplete(result); return; }
     if (current.mode === 'multiplayer') { handleMultiplayerSegmentComplete(result); return; }
     if (current.mode === 'playlist') { handlePlaylistSegmentComplete(result); return; }
+    if (current.mode === 'synctest') {
+      UI.showToast('SYNC TEST COMPLETE');
+      UI.resetNav();
+      UI.showScreen('screen-settings', false);
+      resetSessionState();
+      return;
+    }
 
     lastResult = result;
     lastRankInfo = Storage.recordRunResult(result);

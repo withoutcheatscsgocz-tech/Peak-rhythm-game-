@@ -94,6 +94,36 @@ const UI = (() => {
     setTimeout(() => el.classList.add('hidden'), 2400);
   }
 
+  // ---------------- debug overlay (DEBUG LOG setting) ----------------
+  function logDebugError(message) {
+    if (!Storage.getSettings().debugLog) return;
+    const overlay = $('debug-overlay');
+    const body = $('debug-overlay-body');
+    if (!overlay || !body) return;
+    const entry = document.createElement('div');
+    entry.className = 'debug-entry';
+    const time = document.createElement('span');
+    time.className = 'debug-time';
+    const now = new Date();
+    time.textContent = `[${now.toLocaleTimeString()}]`;
+    entry.appendChild(time);
+    entry.appendChild(document.createTextNode(String(message)));
+    body.appendChild(entry);
+    body.scrollTop = body.scrollHeight;
+    overlay.classList.remove('hidden');
+  }
+
+  function hideDebugOverlay() {
+    const overlay = $('debug-overlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  function clearDebugLog() {
+    const body = $('debug-overlay-body');
+    if (body) body.innerHTML = '';
+    hideDebugOverlay();
+  }
+
   // ---------------- theme / skin ----------------
   function applyTheme(themeId) {
     if (themeId === 'default') document.body.removeAttribute('data-theme');
@@ -132,6 +162,13 @@ const UI = (() => {
     replaySelect.value = settings.replayEnabled ? 'on' : 'off';
     replaySelect.addEventListener('change', () => {
       Storage.setSetting('replayEnabled', replaySelect.value === 'on');
+    });
+
+    const debugLogSelect = $('debug-log-select');
+    debugLogSelect.value = settings.debugLog ? 'on' : 'off';
+    debugLogSelect.addEventListener('change', () => {
+      Storage.setSetting('debugLog', debugLogSelect.value === 'on');
+      if (debugLogSelect.value !== 'on') hideDebugOverlay();
     });
 
     // pause screen mirrors the latency slider
@@ -870,6 +907,7 @@ const UI = (() => {
     init,
     showScreen, goBack, resetNav, getCurrentScreen,
     showToast, showAchievementToasts, showThemeUnlockOverlay, showControllerToast,
+    logDebugError, hideDebugOverlay, clearDebugLog,
     applyTheme,
     populateResult,
     initTuner, readTunerSliders, drawTunerCanvas,

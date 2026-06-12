@@ -97,8 +97,29 @@
         <option value="on">ON</option>
       </select>
     </label>
+    <label class="setting-row">
+      <span>Debug Log (show crash details on screen)</span>
+      <select id="debug-log-select" class="select-input focusable">
+        <option value="off">OFF</option>
+        <option value="on">ON</option>
+      </select>
+    </label>
+  </div>
+  <div class="panel">
+    <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
+    <button class="btn focusable" data-action="sync-test">SYNC TEST (120 BPM)</button>
   </div>
   <button class="btn focusable" data-action="back">BACK</button>
+</div>
+
+<!-- ====================== DEBUG OVERLAY ====================== -->
+<div id="debug-overlay" class="debug-overlay hidden">
+  <div class="debug-overlay-header">
+    <span>DEBUG LOG</span>
+    <button class="debug-overlay-close focusable" data-action="debug-log-clear">CLEAR</button>
+    <button class="debug-overlay-close focusable" data-action="debug-log-close">×</button>
+  </div>
+  <div id="debug-overlay-body" class="debug-overlay-body"></div>
 </div>
 
 <!-- ====================== UPLOAD / ANALYSIS PROGRESS ====================== -->

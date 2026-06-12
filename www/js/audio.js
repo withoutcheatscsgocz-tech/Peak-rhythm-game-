@@ -222,6 +222,60 @@ const AudioEngine = (() => {
     return Array.from(out);
   }
 
+  /**
+   * SYNC TEST mode: synthesizes a constant 120 BPM click track (audible)
+   * plus a matching analysis object, so the obstacle/ring timing can be
+   * checked against the audio clock independent of song analysis quality.
+   */
+  async function generateClickTrack() {
+    const bpm = 120;
+    const beatInterval = 60 / bpm;
+    const totalBeats = 64; // 32 seconds
+    const duration = totalBeats * beatInterval;
+    const sampleRate = 44100;
+    const length = Math.ceil(duration * sampleRate);
+
+    const offlineCtx = new OfflineAudioContext(1, length, sampleRate);
+    for (let i = 0; i < totalBeats; i++) {
+      const time = i * beatInterval;
+      const strong = i % 4 === 0;
+      const osc = offlineCtx.createOscillator();
+      const gain = offlineCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(strong ? 1400 : 900, time);
+      gain.gain.setValueAtTime(strong ? 0.35 : 0.2, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.06);
+      osc.connect(gain);
+      gain.connect(offlineCtx.destination);
+      osc.start(time);
+      osc.stop(time + 0.07);
+    }
+    const buffer = await offlineCtx.startRendering();
+
+    const beats = [];
+    for (let i = 0; i < totalBeats; i++) {
+      const strong = i % 4 === 0;
+      beats.push({
+        time: i * beatInterval,
+        energy: strong ? 1 : 0.5,
+        type: strong ? 'strong' : 'weak',
+        section: 'chill',
+      });
+    }
+
+    const analysis = {
+      bpm,
+      duration,
+      beats,
+      sections: [{ time: 0, duration, type: 'chill', intensity: 0.5 }],
+      intensity: 0.5,
+      sampleRate,
+      waveform: [],
+    };
+
+    return { buffer, analysis };
+  }
+
   // ---------------- procedural reverb impulse response ----------------
   function createReverbImpulse(audioCtx, decaySec, preDelaySec) {
     decaySec = decaySec || 2.5;
@@ -316,6 +370,7 @@ const AudioEngine = (() => {
   return {
     getContext, decodeFile, hashAudioBuffer, mixToMono, analyze,
     createReverbImpulse, playTick, playClick, createPlaybackChain,
+    generateClickTrack,
   };
 })();
 
