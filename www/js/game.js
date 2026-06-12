@@ -17,15 +17,8 @@ const Game = (() => {
   const DOT_RADIUS = 16;
   const JUMP_HEIGHT_RATIO = 0.16;
   const MAX_PARTICLES = 400;
-  const POINTS = { perfectStrong: 250, goodStrong: 100, weakOrb: 75 };
+  const POINTS = { perfectStrong: 250, goodStrong: 100 };
   const MIC_TOLERANCE = 0.15;
-  // Vocal orb vertical placement: spectral centroid (Hz) -> height above ground (px)
-  const ORB_CENTROID_MIN = 500;
-  const ORB_CENTROID_MAX = 2200;
-  const ORB_HEIGHT_MIN = 50;
-  const ORB_HEIGHT_MAX = 170;
-  // Ceiling bar bottom edge clears a grounded dot but reaches into the jump arc
-  const CEILING_BAR_WIDTH = 50;
 
   const SECTION_COLORS = {
     intro: { r: 106, g: 141, b: 255 },
@@ -393,8 +386,7 @@ const Game = (() => {
       }
       const predictedTime = onset.time + onset.predictedInterval;
       session.track.push({
-        time: predictedTime, type: onset.type,
-        obstacleType: onset.type === 'strong' ? 'spike' : 'orb',
+        time: predictedTime, type: 'strong', obstacleType: 'spike',
         energy: onset.energy, section: 'live', index: session.track.length,
         hit: false, hitType: null, dissolved: false, validated: false,
       });
@@ -610,7 +602,7 @@ const Game = (() => {
         continue;
       }
 
-      if (session.modifiers.has('autoJump') && el.type === 'strong' && !el.hit && songTime >= el.time) {
+      if (session.modifiers.has('autoJump') && !el.hit && songTime >= el.time) {
         el.hit = true; el.hitType = 'perfect';
         triggerJump(songTime);
         applyHitResult(el, 'perfect', 0, songTime, realNow);
@@ -619,36 +611,14 @@ const Game = (() => {
         continue;
       }
 
-      if (el.type === 'ceiling' && !el.hit && songTime >= el.time) {
-        el.hit = true;
-        if (session.isJumping) {
-          el.hitType = 'miss';
-          const indexBefore = session.trackIndex;
-          registerMiss(el, songTime);
-          if (!running || session.completing || session.trackIndex !== indexBefore) return;
-        } else {
-          el.hitType = 'safe';
-          session.combo++;
-          session.maxCombo = Math.max(session.maxCombo, session.combo);
-          const points = Math.round(POINTS.weakOrb * getComboMultiplier());
-          session.baseScore += points;
-          session.score = Math.round(session.baseScore * session.multiplier);
-          addPopup(`+${points}`, dotX, session.dotY - 30, '#8fd0ff');
-        }
-      }
-
       if (songTime > el.time + goodWindow) {
         if (!el.hit) {
-          if (el.type === 'strong') {
-            const indexBefore = session.trackIndex;
-            registerMiss(el, songTime);
-            // restartFromCheckpoint() may have rewound trackIndex (or ended the
-            // run); bail so the next frame recomputes from the fresh audio clock
-            // instead of continuing this loop with a stale songTime.
-            if (!running || session.completing || session.trackIndex !== indexBefore) return;
-          } else {
-            el.dissolved = true;
-          }
+          const indexBefore = session.trackIndex;
+          registerMiss(el, songTime);
+          // restartFromCheckpoint() may have rewound trackIndex (or ended the
+          // run); bail so the next frame recomputes from the fresh audio clock
+          // instead of continuing this loop with a stale songTime.
+          if (!running || session.completing || session.trackIndex !== indexBefore) return;
         }
         session.trackIndex++;
         continue;
@@ -658,33 +628,16 @@ const Game = (() => {
     }
   }
 
-  function findNearestUnconsumed(adjusted, typeFilter) {
+  function findNearestUnconsumed(adjusted) {
     let best = null, bestDist = session.windows.good + 0.001;
     for (let i = session.trackIndex; i < session.track.length; i++) {
       const el = session.track[i];
       if (el.hit || el.dissolved) continue;
-      // Ceiling bars are resolved passively by processTrack (grounded vs
-      // airborne at el.time), never as a tap-timing target.
-      if (el.type === 'ceiling') continue;
-      if (typeFilter && el.type !== typeFilter) continue;
       if (el.time - adjusted > session.windows.good + 0.05) break;
       const dist = Math.abs(adjusted - el.time);
       if (dist <= session.windows.good && dist < bestDist) { best = el; bestDist = dist; }
     }
     return best;
-  }
-
-  function consumeOrb(el, songTime, realNow) {
-    el.hit = true; el.hitType = 'bonus';
-    session.combo++;
-    session.maxCombo = Math.max(session.maxCombo, session.combo);
-    const points = Math.round(POINTS.weakOrb * getComboMultiplier());
-    session.baseScore += points;
-    session.score = Math.round(session.baseScore * session.multiplier);
-    addPopup(`+${points}`, dotX, session.dotY - 30, '#ffd24d');
-    spawnBurst(dotX, session.dotY, sectionColorString(el.section, 1), 12, 0.8);
-    Haptics.tapGood();
-    checkComboMilestone();
   }
 
   function applyHitResult(el, grade, delta, songTime, realNow) {
@@ -729,7 +682,7 @@ const Game = (() => {
   function registerMiss(el, songTime) {
     el.hitType = 'miss';
     session.hitCount++;
-    if (el.type === 'strong') recordHit(songTime, null, 'miss');
+    recordHit(songTime, null, 'miss');
     session.combo = 0;
     session.perfectStreak = 0;
     if (session.inDrop) session.dropHasHit = true;
@@ -852,19 +805,10 @@ const Game = (() => {
 
     triggerJump(songTime);
 
-    if (session.modifiers.has('autoJump')) {
-      const el = findNearestUnconsumed(adjusted, 'weak');
-      if (el) consumeOrb(el, songTime, realNow);
-      return;
-    }
+    if (session.modifiers.has('autoJump')) return;
 
-    const el = findNearestUnconsumed(adjusted, null);
+    const el = findNearestUnconsumed(adjusted);
     if (!el) return;
-
-    if (el.type === 'weak') {
-      consumeOrb(el, songTime, realNow);
-      return;
-    }
 
     const delta = adjusted - el.time;
     const absDelta = Math.abs(delta);
@@ -990,10 +934,15 @@ const Game = (() => {
   function renderTrack(songTime, secColor) {
     const bpm = (session.levelData && session.levelData.bpm) || (session.micActive ? MicEngine.getBPM() : 120);
     const scrollSpeed = BASE_SCROLL_SPEED * (bpm / 120);
+    // A tap at el.time starts the jump arc, which peaks jumpDuration/2 later -
+    // shift the obstacle's visual arrival to that peak so a beat-accurate tap
+    // clears the spike at the top of the arc instead of while still grounded.
+    const visualOffset = session.jumpDuration / 2;
     const startIdx = Math.max(0, session.trackIndex - 1);
     for (let i = startIdx; i < session.track.length; i++) {
       const el = session.track[i];
-      const screenX = dotX + (el.time - songTime) * scrollSpeed;
+      const visualTime = el.time + visualOffset;
+      const screenX = dotX + (visualTime - songTime) * scrollSpeed;
       if (screenX > width + 100) break;
       if (screenX < -100) continue;
       if (el.hit && el.hitType !== 'miss') continue;
@@ -1005,70 +954,34 @@ const Game = (() => {
       }
 
       const c = SECTION_COLORS[el.section] || secColor;
-      const glow = clamp(1 - Math.abs(songTime - el.time) / 0.3, 0, 1);
+      const glow = clamp(1 - Math.abs(songTime - visualTime) / 0.3, 0, 1);
 
-      if (el.type === 'weak') {
-        let oy;
-        if (el.centroid != null) {
-          const ct = clamp((el.centroid - ORB_CENTROID_MIN) / (ORB_CENTROID_MAX - ORB_CENTROID_MIN), 0, 1);
-          oy = groundY - (ORB_HEIGHT_MIN + ct * (ORB_HEIGHT_MAX - ORB_HEIGHT_MIN));
-        } else {
-          oy = groundY - 70;
-        }
-        const r = 10 + glow * 4;
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(screenX, oy, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${0.5 + glow * 0.5})`;
-        ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
-        ctx.shadowBlur = 12 + glow * 16;
-        ctx.fill();
+      const spikeH = 40 + (el.energy || 0.5) * 30;
+      const spikeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.7)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = spikeColor;
+      ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
+      ctx.shadowBlur = 8 + glow * 20;
+
+      if (el.obstacleType === 'gap') {
+        const gapW = 50;
         ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-      } else if (el.type === 'ceiling') {
-        const barBottom = groundY - DOT_RADIUS * 2 - height * JUMP_HEIGHT_RATIO * 0.5;
-        const edgeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.9)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = el.hitType === 'miss' ? 'rgba(120,0,0,0.85)' : 'rgba(5,6,10,0.92)';
-        ctx.fillRect(screenX - CEILING_BAR_WIDTH / 2, 0, CEILING_BAR_WIDTH, barBottom);
-        ctx.strokeStyle = edgeColor;
-        ctx.lineWidth = 3;
-        ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
-        ctx.shadowBlur = 8 + glow * 20;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(screenX - gapW / 2, groundY, gapW, height - groundY);
+        ctx.strokeStyle = spikeColor;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(screenX - CEILING_BAR_WIDTH / 2, barBottom);
-        ctx.lineTo(screenX + CEILING_BAR_WIDTH / 2, barBottom);
+        ctx.moveTo(screenX - gapW / 2, groundY); ctx.lineTo(screenX - gapW / 2, height);
+        ctx.moveTo(screenX + gapW / 2, groundY); ctx.lineTo(screenX + gapW / 2, height);
         ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
+      } else if (el.obstacleType === 'doubleSpike') {
+        drawSpike(screenX - 14, spikeH);
+        drawSpike(screenX + 14, spikeH);
       } else {
-        const spikeH = 40 + (el.energy || 0.5) * 30;
-        const spikeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.7)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = spikeColor;
-        ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
-        ctx.shadowBlur = 8 + glow * 20;
-
-        if (el.obstacleType === 'gap') {
-          const gapW = 50;
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = '#000';
-          ctx.fillRect(screenX - gapW / 2, groundY, gapW, height - groundY);
-          ctx.strokeStyle = spikeColor;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(screenX - gapW / 2, groundY); ctx.lineTo(screenX - gapW / 2, height);
-          ctx.moveTo(screenX + gapW / 2, groundY); ctx.lineTo(screenX + gapW / 2, height);
-          ctx.stroke();
-        } else if (el.obstacleType === 'doubleSpike') {
-          drawSpike(screenX - 14, spikeH);
-          drawSpike(screenX + 14, spikeH);
-        } else {
-          drawSpike(screenX, spikeH);
-        }
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
+        drawSpike(screenX, spikeH);
       }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
     }
   }
 

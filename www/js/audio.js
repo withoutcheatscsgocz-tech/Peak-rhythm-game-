@@ -49,34 +49,22 @@ const AudioEngine = (() => {
     return mono;
   }
 
-  // ---------------- beat tuner: per-band sensitivity/spacing settings ----------------
+  // ---------------- beat tuner: bass-band sensitivity/spacing settings ----------------
   const DEFAULT_TUNER_SETTINGS = {
     bass: { sensitivity: 1.3, minSpacing: 0.25 },
-    vocal: { sensitivity: 1.25, minSpacing: 0.3 },
-    high: { sensitivity: 1.35, minSpacing: 0.12 },
   };
 
   function defaultTunerSettings() {
     return JSON.parse(JSON.stringify(DEFAULT_TUNER_SETTINGS));
   }
 
-  /** Accepts the new per-band shape, the old single-band shape, or nothing. */
+  /** Accepts the per-band shape, the old flat shape, or nothing. */
   function normalizeTunerSettings(settings) {
     const out = defaultTunerSettings();
     if (!settings) return out;
-    if (settings.bass == null && settings.vocal == null && settings.high == null && settings.sensitivity != null) {
-      ['bass', 'vocal', 'high'].forEach((band) => {
-        out[band].sensitivity = settings.sensitivity;
-        if (settings.minSpacing != null) out[band].minSpacing = settings.minSpacing;
-      });
-      return out;
-    }
-    ['bass', 'vocal', 'high'].forEach((band) => {
-      const src = settings[band];
-      if (!src) return;
-      if (src.sensitivity != null) out[band].sensitivity = src.sensitivity;
-      if (src.minSpacing != null) out[band].minSpacing = src.minSpacing;
-    });
+    const src = settings.bass || settings;
+    if (src.sensitivity != null) out.bass.sensitivity = src.sensitivity;
+    if (src.minSpacing != null) out.bass.minSpacing = src.minSpacing;
     return out;
   }
 
@@ -110,13 +98,13 @@ const AudioEngine = (() => {
   }
 
   /**
-   * Full offline analysis pipeline, split into 3 independent frequency bands:
-   *  - BASS  (~40-150Hz, bandpass on mid)            -> bassBeats  (spikes)
-   *  - VOCAL (~300-3000Hz center-panned mid-vs-side)  -> vocalBeats (orbs, with spectral centroid)
-   *  - HIGH  (~4kHz+, highpass on mid)                -> highBeats  (ceiling bars)
-   * Each band runs its own rolling-average onset detection with per-band
-   * sensitivity/spacing from tunerSettings. A combined `beats` array is also
-   * returned for backward-compat (metronome ring, BPM ONLY clicks, tuner overview).
+   * Full offline analysis pipeline: bandpass-filters the mono mix down to the
+   * bass band (~40-150Hz, where kick/bass-drum hits live) and runs
+   * rolling-average onset detection on its windowed energy to find
+   * bassBeats -> the spike obstacles' beat timeline. A 512-sample window
+   * (~11.6ms @ 44.1kHz) keeps onset times closely aligned to the audible hit.
+   * A combined `beats` array is also returned for backward-compat (metronome
+   * ring, BPM ONLY clicks, tuner overview).
    */
   async function analyze(audioBuffer, tunerSettings, onProgress) {
     const t = normalizeTunerSettings(tunerSettings);
@@ -126,139 +114,62 @@ const AudioEngine = (() => {
     const left = audioBuffer.getChannelData(0);
     const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
 
-    // mid = (L+R)/2 (mono mixdown); side = (L-R)/2 (0 for mono sources)
+    // mono mixdown
     const mid = new Float32Array(length);
-    const side = new Float32Array(length);
-    for (let i = 0; i < length; i++) {
-      mid[i] = (left[i] + right[i]) * 0.5;
-      side[i] = (left[i] - right[i]) * 0.5;
-    }
+    for (let i = 0; i < length; i++) mid[i] = (left[i] + right[i]) * 0.5;
     if (onProgress) onProgress(0.1);
 
-    // 8-channel offline render: 0=bass, 1-3=vocal-mid(500/1200/2200), 4-6=vocal-side, 7=high
-    const offlineCtx = new OfflineAudioContext(8, length, sampleRate);
+    const offlineCtx = new OfflineAudioContext(1, length, sampleRate);
     const midBuf = offlineCtx.createBuffer(1, length, sampleRate);
     midBuf.copyToChannel(mid, 0);
-    const sideBuf = offlineCtx.createBuffer(1, length, sampleRate);
-    sideBuf.copyToChannel(side, 0);
-
     const midSrc = offlineCtx.createBufferSource();
     midSrc.buffer = midBuf;
-    const sideSrc = offlineCtx.createBufferSource();
-    sideSrc.buffer = sideBuf;
-
-    const merger = offlineCtx.createChannelMerger(8);
-    merger.connect(offlineCtx.destination);
 
     const bassFilter = offlineCtx.createBiquadFilter();
     bassFilter.type = 'bandpass';
     bassFilter.frequency.value = 85; // center of ~40-150Hz
     bassFilter.Q.value = 1.0;
     midSrc.connect(bassFilter);
-    bassFilter.connect(merger, 0, 0);
-
-    const VOCAL_FREQS = [500, 1200, 2200];
-    VOCAL_FREQS.forEach((freq, i) => {
-      const f = offlineCtx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.frequency.value = freq;
-      f.Q.value = 1.4;
-      midSrc.connect(f);
-      f.connect(merger, 0, 1 + i);
-    });
-    VOCAL_FREQS.forEach((freq, i) => {
-      const f = offlineCtx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.frequency.value = freq;
-      f.Q.value = 1.4;
-      sideSrc.connect(f);
-      f.connect(merger, 0, 4 + i);
-    });
-
-    const highFilter = offlineCtx.createBiquadFilter();
-    highFilter.type = 'highpass';
-    highFilter.frequency.value = 4000;
-    midSrc.connect(highFilter);
-    highFilter.connect(merger, 0, 7);
+    bassFilter.connect(offlineCtx.destination);
 
     midSrc.start();
-    sideSrc.start();
     const rendered = await offlineCtx.startRendering();
     if (onProgress) onProgress(0.45);
 
     const bassData = rendered.getChannelData(0);
-    const vMid = [rendered.getChannelData(1), rendered.getChannelData(2), rendered.getChannelData(3)];
-    const vSide = [rendered.getChannelData(4), rendered.getChannelData(5), rendered.getChannelData(6)];
-    const highData = rendered.getChannelData(7);
 
-    // windowed energy per band
-    const windowSize = 1024;
+    // windowed bass energy
+    const windowSize = 512;
     const numWindows = Math.floor(length / windowSize);
     const bassEnergy = new Float32Array(numWindows);
-    const highEnergy = new Float32Array(numWindows);
-    const vocalEnergy = new Float32Array(numWindows);
-    const centroid = new Float32Array(numWindows);
-    let maxBass = 1e-9, maxHigh = 1e-9, maxVocal = 1e-9;
+    let maxBass = 1e-9;
 
     for (let w = 0; w < numWindows; w++) {
       const start = w * windowSize;
-      let sumBass = 0, sumHigh = 0;
-      let me0 = 0, me1 = 0, me2 = 0, se0 = 0, se1 = 0, se2 = 0;
+      let sumBass = 0;
       for (let i = 0; i < windowSize; i++) {
-        const idx = start + i;
-        const b = bassData[idx]; sumBass += b * b;
-        const h = highData[idx]; sumHigh += h * h;
-        const v0 = vMid[0][idx]; me0 += v0 * v0;
-        const v1 = vMid[1][idx]; me1 += v1 * v1;
-        const v2 = vMid[2][idx]; me2 += v2 * v2;
-        const s0 = vSide[0][idx]; se0 += s0 * s0;
-        const s1 = vSide[1][idx]; se1 += s1 * s1;
-        const s2 = vSide[2][idx]; se2 += s2 * s2;
+        const b = bassData[start + i];
+        sumBass += b * b;
       }
       const eBass = sumBass / windowSize;
-      const eHigh = sumHigh / windowSize;
       bassEnergy[w] = eBass;
-      highEnergy[w] = eHigh;
       if (eBass > maxBass) maxBass = eBass;
-      if (eHigh > maxHigh) maxHigh = eHigh;
-
-      const midSum = (me0 + me1 + me2) / windowSize;
-      const sideSum = (se0 + se1 + se2) / windowSize;
-      const centerness = midSum / (midSum + sideSum + 1e-9);
-      const vEnergy = midSum * centerness;
-      vocalEnergy[w] = vEnergy;
-      if (vEnergy > maxVocal) maxVocal = vEnergy;
-      centroid[w] = midSum > 1e-12
-        ? (500 * me0 + 1200 * me1 + 2200 * me2) / (me0 + me1 + me2)
-        : 1200;
     }
     if (onProgress) onProgress(0.7);
 
     const windowsPerSec = sampleRate / windowSize;
     const bassOnsets = detectOnsets(bassEnergy, maxBass, windowsPerSec, t.bass.sensitivity, t.bass.minSpacing);
-    const vocalOnsets = detectOnsets(vocalEnergy, maxVocal, windowsPerSec, t.vocal.sensitivity, t.vocal.minSpacing);
-    const highOnsets = detectOnsets(highEnergy, maxHigh, windowsPerSec, t.high.sensitivity, t.high.minSpacing);
     if (onProgress) onProgress(0.85);
 
     const bassBeats = bassOnsets.map(o => ({
       time: (o.index * windowSize) / sampleRate, energy: o.energy, band: 'bass',
     }));
-    const vocalBeats = vocalOnsets.map(o => ({
-      time: (o.index * windowSize) / sampleRate, energy: o.energy, band: 'vocal', centroid: centroid[o.index],
-    }));
-    const highBeats = highOnsets.map(o => ({
-      time: (o.index * windowSize) / sampleRate, energy: o.energy, band: 'high',
-    }));
 
-    // BPM = median interval of bass onsets (the rhythmic backbone); fall back
-    // to all onsets combined if the bass band was too sparse.
+    // BPM = median interval of bass onsets (the rhythmic backbone)
     let bpm = 120;
-    const bpmSource = bassBeats.length > 1
-      ? bassBeats
-      : bassBeats.concat(vocalBeats, highBeats).sort((a, b) => a.time - b.time);
-    if (bpmSource.length > 1) {
+    if (bassBeats.length > 1) {
       const intervals = [];
-      for (let i = 1; i < bpmSource.length; i++) intervals.push(bpmSource[i].time - bpmSource[i - 1].time);
+      for (let i = 1; i < bassBeats.length; i++) intervals.push(bassBeats[i].time - bassBeats[i - 1].time);
       intervals.sort((a, b) => a - b);
       const median = intervals[Math.floor(intervals.length / 2)];
       if (median > 0) {
@@ -293,16 +204,9 @@ const AudioEngine = (() => {
 
     const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.floor(time / sectionWindowSec))].type;
     bassBeats.forEach(b => { b.section = sectionAt(b.time); });
-    vocalBeats.forEach(b => { b.section = sectionAt(b.time); });
-    highBeats.forEach(b => { b.section = sectionAt(b.time); });
 
     // combined beats for backward-compat (metronome ring, BPM ONLY clicks, tuner overview)
-    const beats = bassBeats.map(b => ({ time: b.time, energy: b.energy, type: 'strong', section: b.section, band: 'bass' }))
-      .concat(
-        vocalBeats.map(b => ({ time: b.time, energy: b.energy, type: 'weak', section: b.section, band: 'vocal', centroid: b.centroid })),
-        highBeats.map(b => ({ time: b.time, energy: b.energy, type: 'weak', section: b.section, band: 'high' }))
-      )
-      .sort((a, b) => a.time - b.time);
+    const beats = bassBeats.map(b => ({ time: b.time, energy: b.energy, type: 'strong', section: b.section, band: 'bass' }));
 
     const intensity = sections.reduce((a, s) => a + s.intensity, 0) / sections.length;
 
@@ -312,7 +216,7 @@ const AudioEngine = (() => {
       bpm: Math.round(bpm),
       duration: audioBuffer.duration,
       beats,
-      bassBeats, vocalBeats, highBeats,
+      bassBeats,
       sections,
       intensity,
       sampleRate,
@@ -366,7 +270,6 @@ const AudioEngine = (() => {
 
     const beats = [];
     const bassBeats = [];
-    const vocalBeats = [];
     for (let i = 0; i < totalBeats; i++) {
       const strong = i % 4 === 0;
       const time = i * beatInterval;
@@ -376,11 +279,7 @@ const AudioEngine = (() => {
         type: strong ? 'strong' : 'weak',
         section: 'chill',
       });
-      if (strong) {
-        bassBeats.push({ time, energy: 1, section: 'chill' });
-      } else {
-        vocalBeats.push({ time, energy: 0.5, section: 'chill', centroid: 1200 });
-      }
+      bassBeats.push({ time, energy: strong ? 1 : 0.6, section: 'chill' });
     }
 
     const analysis = {
@@ -388,8 +287,6 @@ const AudioEngine = (() => {
       duration,
       beats,
       bassBeats,
-      vocalBeats,
-      highBeats: [],
       sections: [{ time: 0, duration, type: 'chill', intensity: 0.5 }],
       intensity: 0.5,
       sampleRate,
@@ -547,37 +444,6 @@ const AudioEngine = (() => {
     osc.stop(time + 0.2);
   }
 
-  /** Soft "pluck" for VOCAL / orb beats. */
-  function playVocalPluck(audioCtx, time, gainValue) {
-    gainValue = gainValue != null ? gainValue : 0.25;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(880, time);
-    osc.frequency.exponentialRampToValueAtTime(660, time + 0.08);
-    gain.gain.setValueAtTime(gainValue, time);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.12);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(time);
-    osc.stop(time + 0.14);
-  }
-
-  /** Bright "click" for HIGH / ceiling-bar beats. */
-  function playHighClick(audioCtx, time, gainValue) {
-    gainValue = gainValue != null ? gainValue : 0.22;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(3200, time);
-    gain.gain.setValueAtTime(gainValue, time);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.035);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(time);
-    osc.stop(time + 0.04);
-  }
-
   /**
    * Builds the playback graph for a song with optional reverb (SLOWED
    * modifier) and mute (BPM ONLY modifier). Returns the source node
@@ -623,7 +489,7 @@ const AudioEngine = (() => {
     getContext, decodeFile, hashAudioBuffer, mixToMono, analyze,
     createReverbImpulse, playTick, playClick, createPlaybackChain,
     generateClickTrack,
-    playBassThump, playVocalPluck, playHighClick,
+    playBassThump,
     normalizeTunerSettings, defaultTunerSettings,
     TAP_SOUNDS, playTapSound,
   };

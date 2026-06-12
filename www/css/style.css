@@ -345,11 +345,6 @@ input[type="range"] {
   position: absolute; top: -2px; width: 4px; height: 10px; border-radius: 2px;
   background: rgba(255,255,255,0.6);
 }
-.song-progress-orbchains { position: absolute; inset: 0; }
-.song-progress-orbchains .chain {
-  position: absolute; top: 0; height: 100%; min-width: 2px;
-  background: #ffd24d; opacity: 0.5; border-radius: 2px;
-}
 .song-progress-ghost {
   position: absolute; top: -4px; width: 2px; height: 14px; background: #ffd24d;
   box-shadow: 0 0 6px #ffd24d;
@@ -439,7 +434,6 @@ input[type="range"] {
   background: rgba(255,255,255,0.03); border: 1px solid var(--accent-dim); border-radius: 6px;
   margin-bottom: 12px;
 }
-.tuner-canvas-3band { height: 168px; }
 
 .tuner-band { padding: 12px 16px; }
 .tuner-band-header {
@@ -451,10 +445,6 @@ input[type="range"] {
 }
 .tuner-band-bass .tuner-band-label { color: #ff785a; text-shadow: 0 0 6px #ff785a; }
 .tuner-band-bass .tuner-band-header .btn { border-color: #ff785a; color: #ff785a; }
-.tuner-band-vocal .tuner-band-label { color: #ffd24d; text-shadow: 0 0 6px #ffd24d; }
-.tuner-band-vocal .tuner-band-header .btn { border-color: #ffd24d; color: #ffd24d; }
-.tuner-band-high .tuner-band-label { color: #6ee0ff; text-shadow: 0 0 6px #6ee0ff; }
-.tuner-band-high .tuner-band-header .btn { border-color: #6ee0ff; color: #6ee0ff; }
 
 /* ============================================================
    Mic calibration

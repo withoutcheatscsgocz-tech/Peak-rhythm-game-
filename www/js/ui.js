@@ -177,12 +177,6 @@ const UI = (() => {
       Storage.setSetting('tapSound', tapSoundSelect.value);
     });
 
-    const songMapOverlaySelect = $('songmap-overlay-select');
-    songMapOverlaySelect.value = settings.songMapOverlay ? 'on' : 'off';
-    songMapOverlaySelect.addEventListener('change', () => {
-      Storage.setSetting('songMapOverlay', songMapOverlaySelect.value === 'on');
-    });
-
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');
@@ -217,23 +211,6 @@ const UI = (() => {
   }
 
   // ---------------- song map preview (minimap of the generated level) ----------------
-  const ORB_CHAIN_GAP = 1.5; // sec - max gap between orbs to belong to the same chain
-
-  function buildOrbChains(track) {
-    const orbTimes = track.filter(t => t.type === 'weak').map(t => t.time).sort((a, b) => a - b);
-    const chains = [];
-    let current = null;
-    orbTimes.forEach((t) => {
-      if (current && t - current.end <= ORB_CHAIN_GAP) {
-        current.end = t;
-      } else {
-        current = { start: t, end: t };
-        chains.push(current);
-      }
-    });
-    return chains.filter(c => c.end > c.start); // chains of 2+ orbs
-  }
-
   function populateSongMap(levelData) {
     const canvas = $('song-map-canvas');
     if (!levelData || !levelData.duration) { canvas.classList.add('hidden'); return; }
@@ -248,7 +225,6 @@ const UI = (() => {
 
     const duration = levelData.duration;
     const densityH = h * 0.7;
-    const chainY = h - 8;
 
     // section background (density / drop highlighting)
     (levelData.sections || []).forEach((sec) => {
@@ -279,19 +255,6 @@ const UI = (() => {
       ctx.fillRect(i * bucketW, densityH - barH, Math.max(1, bucketW - 1), barH);
     }
     ctx.globalAlpha = 1;
-
-    // orb chains
-    ctx.strokeStyle = '#ffd24d';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    buildOrbChains(levelData.track || []).forEach((chain) => {
-      const x1 = (chain.start / duration) * w;
-      const x2 = Math.max(x1 + 2, (chain.end / duration) * w);
-      ctx.beginPath();
-      ctx.moveTo(x1, chainY);
-      ctx.lineTo(x2, chainY);
-      ctx.stroke();
-    });
 
     // checkpoints
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
@@ -355,12 +318,10 @@ const UI = (() => {
     });
   }
 
-  // ---------------- beat tuner (3-band: bass / vocal / high) ----------------
-  const TUNER_BANDS = ['bass', 'vocal', 'high'];
+  // ---------------- beat tuner (bass band) ----------------
+  const TUNER_BANDS = ['bass'];
   const TUNER_BAND_COLORS = {
     bass: 'rgba(255,120,90,0.9)',
-    vocal: 'rgba(255,210,77,0.9)',
-    high: 'rgba(110,224,255,0.9)',
   };
 
   function initTuner(songHash, analysis) {
@@ -419,33 +380,16 @@ const UI = (() => {
     ctx.stroke();
 
     const duration = analysis.duration || 1;
-    const laneH = h / 3;
-    const lanes = [
-      { beats: analysis.bassBeats || [], color: TUNER_BAND_COLORS.bass, lane: 0 },
-      { beats: analysis.vocalBeats || [], color: TUNER_BAND_COLORS.vocal, lane: 1 },
-      { beats: analysis.highBeats || [], color: TUNER_BAND_COLORS.high, lane: 2 },
-    ];
-    lanes.forEach(({ beats, color, lane }) => {
-      const top = lane * laneH;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      beats.forEach((b) => {
-        const x = (b.time / duration) * w;
-        ctx.moveTo(x, top + 2);
-        ctx.lineTo(x, top + laneH - 2);
-      });
-      ctx.stroke();
+    const beats = analysis.bassBeats || [];
+    ctx.strokeStyle = TUNER_BAND_COLORS.bass;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    beats.forEach((b) => {
+      const x = (b.time / duration) * w;
+      ctx.moveTo(x, 2);
+      ctx.lineTo(x, h - 2);
     });
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(0, i * laneH);
-      ctx.lineTo(w, i * laneH);
-      ctx.stroke();
-    }
+    ctx.stroke();
   }
 
   // ---------------- mic calibration ----------------
@@ -592,23 +536,6 @@ const UI = (() => {
         cp.style.left = `${clamp01(t / duration) * 100}%`;
         cpContainer.appendChild(cp);
       });
-    }
-    const chainContainer = $('song-progress-orbchains');
-    chainContainer.innerHTML = '';
-    const showOverlay = Storage.getSettings().songMapOverlay;
-    if (showOverlay && levelData && levelData.track && duration > 0) {
-      chainContainer.classList.remove('hidden');
-      buildOrbChains(levelData.track).forEach(chainEl => {
-        const x1 = clamp01(chainEl.start / duration) * 100;
-        const x2 = clamp01(chainEl.end / duration) * 100;
-        const bar = document.createElement('div');
-        bar.className = 'chain';
-        bar.style.left = `${x1}%`;
-        bar.style.width = `${Math.max(0.4, x2 - x1)}%`;
-        chainContainer.appendChild(bar);
-      });
-    } else {
-      chainContainer.classList.add('hidden');
     }
     $('song-progress-fill').style.width = '0%';
     $('song-progress-ghost').classList.add('hidden');

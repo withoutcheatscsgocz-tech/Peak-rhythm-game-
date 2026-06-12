@@ -55,7 +55,6 @@ const Storage = (() => {
         listenEnabled: false,
         debugLog: false,
         tapSound: 'hihat', // hihat | clap | 808 | laser
-        songMapOverlay: false, // show orb-chain markers on the in-game progress bar
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false },
@@ -73,7 +72,7 @@ const Storage = (() => {
       },
       leaderboards: {}, // hash -> [ {score, perfectRate, maxCombo, modifiers, date, fileName} ]
       endlessLeaderboard: [], // [ {score, songsSurvived, totalTime, date} ]
-      tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing}, vocal:{...}, high:{...} }
+      tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing} }
       songLibrary: {}, // hash -> { name, bpm, duration, intensity, analysis, levelData, addedDate }
     };
   }

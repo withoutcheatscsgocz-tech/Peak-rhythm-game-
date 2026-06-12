@@ -185,13 +185,7 @@ const App = (() => {
         tunerRegenerate();
         break;
       case 'tuner-test-bass':
-        tunerTestSound('bass');
-        break;
-      case 'tuner-test-vocal':
-        tunerTestSound('vocal');
-        break;
-      case 'tuner-test-high':
-        tunerTestSound('high');
+        tunerTestSound();
         break;
       case 'start-game':
         proceedFromModifiers();
@@ -425,10 +419,7 @@ const App = (() => {
     const playback = AudioEngine.createPlaybackChain(audioCtx, snippet, {});
     const startAt = audioCtx.currentTime + 0.05;
     playback.source.start(startAt);
-    // Each band gets its own distinct sound so timing/placement can be heard against the song.
     (analysis.bassBeats || []).forEach(b => AudioEngine.playBassThump(audioCtx, startAt + b.time));
-    (analysis.vocalBeats || []).forEach(b => AudioEngine.playVocalPluck(audioCtx, startAt + b.time));
-    (analysis.highBeats || []).forEach(b => AudioEngine.playHighClick(audioCtx, startAt + b.time));
     setTimeout(() => { try { playback.source.stop(); } catch (e) {} }, 10500);
   }
 
@@ -439,13 +430,10 @@ const App = (() => {
     AudioEngine.playTapSound(audioCtx, audioCtx.currentTime + 0.05, soundId);
   }
 
-  function tunerTestSound(band) {
+  function tunerTestSound() {
     const audioCtx = AudioEngine.getContext();
-    const fn = band === 'bass' ? AudioEngine.playBassThump
-      : band === 'vocal' ? AudioEngine.playVocalPluck
-      : AudioEngine.playHighClick;
     const startAt = audioCtx.currentTime + 0.05;
-    for (let i = 0; i < 4; i++) fn(audioCtx, startAt + i * 0.35);
+    for (let i = 0; i < 4; i++) AudioEngine.playBassThump(audioCtx, startAt + i * 0.35);
   }
 
   async function tunerRegenerate() {
