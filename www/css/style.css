@@ -306,6 +306,8 @@ input[type="range"] {
 .hud-combo.milestone { animation: comboFlash 0.4s ease-out; color: var(--accent); }
 @keyframes comboFlash { 0% { transform: scale(2); } 100% { transform: scale(1); } }
 .hud-mult { font-size: 12px; letter-spacing: 2px; color: var(--accent-dim); }
+.hud-mult.rolling { color: #ff3b3b; animation: rollPulse 0.6s ease-in-out infinite; }
+@keyframes rollPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
 .icon-btn {
   position: absolute; top: calc(10px + var(--safe-area-top)); right: 14px;

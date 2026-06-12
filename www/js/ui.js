@@ -555,8 +555,14 @@ const UI = (() => {
     $('hud-combo').textContent = state.combo > 0
       ? `${state.combo} COMBO ×${state.comboMultiplier.toFixed(2)}` : '';
 
-    const hearts = '♥'.repeat(Math.max(0, state.livesRemaining));
-    $('hud-mult').textContent = `×${state.multiplier.toFixed(1)}  ${hearts}`;
+    const hudMult = $('hud-mult');
+    if (state.ballState === 'roll') {
+      hudMult.textContent = `×${state.multiplier.toFixed(1)}  ROLLING ${state.rollSpikesPassed}/${state.rollSpikeLimit}`;
+      hudMult.classList.add('rolling');
+    } else {
+      hudMult.textContent = `×${state.multiplier.toFixed(1)}`;
+      hudMult.classList.remove('rolling');
+    }
 
     if (state.duration && isFinite(state.duration)) {
       const pct = clamp01(state.songTime / state.duration) * 100;

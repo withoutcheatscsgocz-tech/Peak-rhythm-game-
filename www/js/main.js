@@ -503,6 +503,7 @@ const App = (() => {
     Game.onUpdateHUD = (state) => UI.updateHUD(state);
     Game.onComboMilestone = () => UI.flashCombo();
     Game.onMiss = () => {};
+    Game.onRecovery = () => UI.showToast('BACK ON TRACK');
     Game.onCheckpoint = () => {};
     Game.onRestart = () => UI.showToast('CHECKPOINT RESTART');
     Game.onPracticeTiming = (deltaMs, grade) => UI.updatePracticeFeedback(deltaMs, grade);

@@ -15,7 +15,11 @@ const Game = (() => {
   const DOT_X_RATIO = 0.24;
   const GROUND_Y_RATIO = 0.62;
   const DOT_RADIUS = 16;
-  const JUMP_HEIGHT_RATIO = 0.16;
+  const ARC_HEIGHT_RATIO = 0.16; // bounce arc height at a 1-beat gap, as a fraction of screen height
+  const ARC_HEIGHT_MIN_RATIO = 0.05;
+  const ARC_HEIGHT_MAX_RATIO = 0.30;
+  const GOOD_ARC_SCALE = 0.45; // C4: a GOOD landing makes the *next* arc lower/flatter
+  const ROLL_SPIKE_LIMIT = 8;
   const MAX_PARTICLES = 400;
   const POINTS = { perfectStrong: 250, goodStrong: 100 };
   const MIC_TOLERANCE = 0.15;
@@ -30,7 +34,7 @@ const Game = (() => {
 
   const MODIFIER_DEFS = [
     { id: 'slowed', name: 'SLOWED + REVERB \u{1F317}', desc: 'Song at 0.8x speed with dreamy reverb & purple haze', mult: 0.7, group: 'speed', value: 0.8 },
-    { id: 'autoJump', name: 'AUTO-JUMP', desc: 'Dot jumps automatically on strong beats - just enjoy', mult: 0.3, group: 'auto' },
+    { id: 'autoJump', name: 'AUTO-BOUNCE', desc: 'The ball lands perfectly on every spike automatically - just enjoy', mult: 0.3, group: 'auto' },
     { id: 'noFail', name: 'NO FAIL', desc: 'Hits never restart, only reset your combo', mult: 0.5 },
     { id: 'widerWindows', name: 'WIDER WINDOWS', desc: 'Perfect ±180ms, Good ±280ms', mult: 0.8 },
     { id: 'rush', name: 'RUSH 1.25x', desc: 'Song at 1.25x speed', mult: 1.5, group: 'speed', value: 1.25 },
@@ -308,12 +312,14 @@ const Game = (() => {
       duration: (opts.levelData && opts.levelData.duration) || (opts.audioBuffer && opts.audioBuffer.duration) || Infinity,
       startOffset: opts.startOffset || 0,
       startAudioTime: 0, lastRealTime: 0, elapsedPlayTime: 0,
-      dotY: 0, isJumping: false, jumpStartSongTime: -10, jumpDuration: 0.32,
+      dotY: 0, ballState: 'bounce', arcGrade: 'perfect', desaturation: 0,
+      arcStartTime: opts.practice ? opts.practice.loopStart : (opts.startOffset || 0),
+      rollSpikesPassed: 0, rollSpikeLimit: modifiers.has('suddenDeath') ? 1 : ROLL_SPIKE_LIMIT,
+      rollTimeSec: 0,
       score: carry.score || 0, baseScore: carry.baseScore || 0,
       combo: carry.combo || 0, maxCombo: carry.maxCombo || 0,
       perfectCount: carry.perfectCount || 0, goodCount: carry.goodCount || 0, hitCount: carry.hitCount || 0,
       jumps: carry.jumps || 0,
-      livesRemaining: modifiers.has('suddenDeath') ? 1 : 3,
       perfectStreak: 0, perfectStreaksOf10Count: 0,
       inDrop: false, dropHasHit: false, dropSurvivedNoHit: false,
       ringBeatIndex: 0, trailHistory: [],
@@ -336,7 +342,6 @@ const Game = (() => {
     const bpm = (session.levelData && session.levelData.bpm) || 120;
     const baseInterval = 60 / bpm;
     session.beatInterval = session.practice ? baseInterval * (session.playbackRate * 0.6) : baseInterval / session.playbackRate;
-    session.jumpDuration = clamp(session.beatInterval * 0.45, 0.14, 0.42);
 
     saveCheckpointSnapshot();
 
@@ -430,16 +435,26 @@ const Game = (() => {
     isPaused = false;
   }
 
+  /** Fully tears down a playback graph, including the fail-effect filter/LFO nodes. */
+  function teardownPlaybackChain(pb) {
+    if (!pb) return;
+    try { pb.source.stop(); } catch (e) {}
+    try { pb.source.disconnect(); } catch (e) {}
+    try { pb.filter.disconnect(); } catch (e) {}
+    try { pb.detuneLfo.stop(); } catch (e) {}
+    try { pb.detuneLfo.disconnect(); } catch (e) {}
+    try { pb.detuneDepth.disconnect(); } catch (e) {}
+    try { pb.masterGain.disconnect(); } catch (e) {}
+    try { pb.analyser.disconnect(); } catch (e) {}
+  }
+
   function destroy() {
     running = false;
     isPaused = false;
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
     if (playback) {
-      try { playback.source.stop(); } catch (e) {}
-      try { playback.source.disconnect(); } catch (e) {}
-      try { playback.masterGain.disconnect(); } catch (e) {}
-      try { playback.analyser.disconnect(); } catch (e) {}
+      teardownPlaybackChain(playback);
       playback = null;
     }
     if (session && session.micActive) MicEngine.stop();
@@ -488,11 +503,6 @@ const Game = (() => {
   }
   function getComboMultiplier() {
     return Math.min(1 + Math.floor(session.combo / 10) * 0.25, 4);
-  }
-  function triggerJump(songTime) {
-    session.isJumping = true;
-    session.jumpStartSongTime = songTime;
-    session.jumps++;
   }
   function triggerHitStop(realNow) {
     session.frozenSongTime = computeSongTime(realNow);
@@ -549,8 +559,11 @@ const Game = (() => {
   function update(songTime, realNow, dt) {
     if (session.completing) { updateCompleting(realNow, dt); return; }
 
-    if (session.isJumping && songTime - session.jumpStartSongTime >= session.jumpDuration) {
-      session.isJumping = false;
+    if (session.ballState === 'roll') {
+      session.rollTimeSec += dt;
+      session.desaturation = Math.min(1, session.desaturation + dt / 0.3);
+    } else {
+      session.desaturation = Math.max(0, session.desaturation - dt / 0.15);
     }
 
     if (session.levelData && session.levelData.sections) {
@@ -609,8 +622,12 @@ const Game = (() => {
 
       if (session.modifiers.has('autoJump') && !el.hit && songTime >= el.time) {
         el.hit = true; el.hitType = 'perfect';
-        triggerJump(songTime);
-        applyHitResult(el, 'perfect', 0, songTime, realNow);
+        session.jumps++;
+        if (session.ballState === 'roll') {
+          recoverFromRoll(el, 'perfect', songTime, realNow);
+        } else {
+          applyLanding(el, 'perfect', 0, songTime, realNow);
+        }
         recordHit(songTime, 0, 'perfect');
         session.trackIndex++;
         continue;
@@ -633,22 +650,13 @@ const Game = (() => {
     }
   }
 
-  function findNearestUnconsumed(adjusted) {
-    let best = null, bestDist = session.windows.good + 0.001;
-    for (let i = session.trackIndex; i < session.track.length; i++) {
-      const el = session.track[i];
-      if (el.hit || el.dissolved) continue;
-      if (el.time - adjusted > session.windows.good + 0.05) break;
-      const dist = Math.abs(adjusted - el.time);
-      if (dist <= session.windows.good && dist < bestDist) { best = el; bestDist = dist; }
-    }
-    return best;
-  }
-
-  function applyHitResult(el, grade, delta, songTime, realNow) {
+  /** B1: a successful landing while bouncing - scores, builds combo, sets next arc's height. */
+  function applyLanding(el, grade, delta, songTime, realNow) {
     session.combo++;
     session.maxCombo = Math.max(session.maxCombo, session.combo);
     const comboMult = getComboMultiplier();
+    session.arcGrade = grade;
+    session.arcStartTime = el.time;
 
     if (grade === 'perfect') {
       session.perfectCount++;
@@ -661,6 +669,7 @@ const Game = (() => {
       const points = Math.round(POINTS.perfectStrong * comboMult);
       session.baseScore += points;
       addPopup(`+${points} PERFECT`, dotX, session.dotY - 30, '#ffffff');
+      addComboPopup();
       spawnBurst(dotX, session.dotY, sectionColorString(el.section, 1), 24, 1.2);
       triggerHitStop(realNow);
       triggerScreenShake(el.energy || 0.5, realNow);
@@ -671,7 +680,7 @@ const Game = (() => {
       session.perfectStreak = 0;
       const points = Math.round(POINTS.goodStrong * comboMult);
       session.baseScore += points;
-      addPopup(`+${points} GOOD`, dotX, session.dotY - 30, '#aaaaaa');
+      addPopup(`+good`, dotX, session.dotY - 30, '#aaaaaa');
       spawnBurst(dotX, session.dotY, sectionColorString(el.section, 0.7), 10, 0.8);
       Haptics.tapGood();
     }
@@ -680,8 +689,40 @@ const Game = (() => {
     checkComboMilestone();
   }
 
+  /** B3: big combo number popup at the bounce point ("23x"), only on PERFECTs. */
+  function addComboPopup() {
+    if (session.combo < 2) return;
+    popups.push({
+      text: `${session.combo}x`, x: dotX, y: session.dotY - 10, life: 1, color: session.accentColor,
+      big: true,
+    });
+  }
+
   function recordHit(time, delta, grade) {
     session.hitHistory.push({ time, delta, grade });
+  }
+
+  /** B2: drop into rolling - the player failed to land in time. */
+  function enterRollState(songTime) {
+    session.ballState = 'roll';
+    session.rollSpikesPassed = 0;
+    spawnBurst(dotX, session.dotY, '#ff3b3b', 14, 1);
+    triggerScreenShake(0.8, audioCtx.currentTime);
+    Haptics.tapHit();
+    if (playback) AudioEngine.enterFailEffect(playback, audioCtx.currentTime);
+  }
+
+  /** B2: pop back into bouncing - the player recovered on a rolling spike. */
+  function recoverFromRoll(el, grade, songTime, realNow) {
+    session.ballState = 'bounce';
+    session.arcGrade = grade;
+    session.arcStartTime = el.time;
+    session.rollSpikesPassed = 0;
+    spawnBurst(dotX, session.dotY, sectionColorString(el.section, 1), 30, 1.4);
+    triggerScreenShake(0.6, realNow);
+    Haptics.tapPerfect();
+    if (playback) AudioEngine.exitFailEffect(playback, audioCtx.currentTime);
+    if (Game.onRecovery) Game.onRecovery(grade);
   }
 
   function registerMiss(el, songTime) {
@@ -691,28 +732,23 @@ const Game = (() => {
     session.combo = 0;
     session.perfectStreak = 0;
     if (session.inDrop) session.dropHasHit = true;
-    spawnBurst(dotX, session.dotY, '#ff3b3b', 14, 1);
-    triggerScreenShake(0.8, audioCtx.currentTime);
-    Haptics.tapHit();
+
+    if (session.ballState === 'bounce') {
+      enterRollState(songTime);
+    } else {
+      session.rollSpikesPassed++;
+    }
+
+    if (Game.onMiss) Game.onMiss();
 
     if (session.practice) {
       session.practicePassHits++;
-      if (Game.onMiss) Game.onMiss(session.livesRemaining);
       return;
     }
+    if (session.micActive) return;
 
-    if (session.micActive) {
-      if (Game.onMiss) Game.onMiss(session.livesRemaining);
-      return;
-    }
-
-    session.livesRemaining--;
-    if (Game.onMiss) Game.onMiss(session.livesRemaining);
-
-    if (session.livesRemaining <= 0) {
-      if (session.modifiers.has('noFail')) {
-        session.livesRemaining = session.modifiers.has('suddenDeath') ? 1 : 3;
-      } else if (session.mode === 'endless') {
+    if (session.rollSpikesPassed >= session.rollSpikeLimit && !session.modifiers.has('noFail')) {
+      if (session.mode === 'endless') {
         beginGameOver(songTime);
       } else {
         restartFromCheckpoint(songTime);
@@ -729,21 +765,19 @@ const Game = (() => {
     session.perfectCount = snap.perfectCount; session.goodCount = snap.goodCount; session.hitCount = snap.hitCount;
     session.hitHistory = snap.hitHistory.slice();
     session.combo = 0; session.perfectStreak = 0;
-    session.livesRemaining = session.modifiers.has('suddenDeath') ? 1 : 3;
+    session.ballState = 'bounce'; session.arcGrade = 'perfect'; session.desaturation = 0;
+    session.rollSpikesPassed = 0; session.rollTimeSec = 0;
     session.track.forEach((t, i) => {
       if (i >= snap.trackIndex) { t.hit = false; t.hitType = null; t.dissolved = false; }
     });
 
-    if (playback) {
-      try { playback.source.stop(); } catch (e) {}
-      try { playback.source.disconnect(); } catch (e) {}
-    }
+    teardownPlaybackChain(playback);
     setupPlaybackChain();
     const offset = snap.songTime;
     playback.source.start(audioCtx.currentTime, offset);
     session.startAudioTime = audioCtx.currentTime;
     session.startOffset = offset;
-    session.isJumping = false;
+    session.arcStartTime = offset;
     session.hitStopUntilReal = 0;
     session.ringIndex = 0;
     session.nextClickIndex = 0;
@@ -759,6 +793,8 @@ const Game = (() => {
       session.track.forEach(t => { t.hit = false; t.hitType = null; t.dissolved = false; });
       const idx = session.track.findIndex(t => t.time >= session.practice.loopStart);
       session.trackIndex = idx < 0 ? 0 : idx;
+      session.ballState = 'bounce'; session.arcGrade = 'perfect'; session.desaturation = 0;
+      session.rollSpikesPassed = 0; session.arcStartTime = session.practice.loopStart;
       if (Game.onPracticePass) Game.onPracticePass(session.practiceCleanPasses, clean);
       if (session.practiceCleanPasses >= 3 && Game.onPracticeMastered) Game.onPracticeMastered();
     }
@@ -825,7 +861,9 @@ const Game = (() => {
       multiplier: session.multiplier,
       songTime, duration: session.duration, remaining: Math.max(0, session.duration - songTime),
       section: currentSection(songTime),
-      livesRemaining: session.livesRemaining,
+      ballState: session.ballState,
+      rollSpikesPassed: session.rollSpikesPassed,
+      rollSpikeLimit: session.rollSpikeLimit,
       ghostDelta: session.ghostDelta,
       checkpointIndex: session.checkpointIndex,
       mode: session.mode,
@@ -840,12 +878,12 @@ const Game = (() => {
     const latency = (Storage.getSettings().latencyOffset || 0) / 1000;
     const adjusted = songTime + latency;
 
-    triggerJump(songTime);
+    session.jumps++;
 
     if (session.modifiers.has('autoJump')) return;
 
-    const el = findNearestUnconsumed(adjusted);
-    if (!el) return;
+    const el = session.track[session.trackIndex];
+    if (!el || el.hit || el.dissolved) return;
 
     const delta = adjusted - el.time;
     const absDelta = Math.abs(delta);
@@ -855,9 +893,15 @@ const Game = (() => {
     else return;
 
     el.hit = true; el.hitType = grade;
+
+    if (session.ballState === 'roll') {
+      recoverFromRoll(el, grade, songTime, realNow);
+    } else {
+      applyLanding(el, grade, delta, songTime, realNow);
+    }
     if (session.practice && Game.onPracticeTiming) Game.onPracticeTiming(delta * 1000, grade);
-    applyHitResult(el, grade, delta, songTime, realNow);
     recordHit(songTime, delta, grade);
+    session.trackIndex++;
   }
 
   // ---------------- completion ----------------
@@ -971,18 +1015,30 @@ const Game = (() => {
   function renderTrack(songTime, secColor) {
     const bpm = (session.levelData && session.levelData.bpm) || (session.micActive ? MicEngine.getBPM() : 120);
     const scrollSpeed = BASE_SCROLL_SPEED * (bpm / 120);
-    // A tap at el.time starts the jump arc, which peaks jumpDuration/2 later -
-    // shift the obstacle's visual arrival to that peak so a beat-accurate tap
-    // clears the spike at the top of the arc instead of while still grounded.
-    const visualOffset = session.jumpDuration / 2;
     const startIdx = Math.max(0, session.trackIndex - 1);
     for (let i = startIdx; i < session.track.length; i++) {
       const el = session.track[i];
-      const visualTime = el.time + visualOffset;
-      const screenX = dotX + (visualTime - songTime) * scrollSpeed;
+      const screenX = dotX + (el.time - songTime) * scrollSpeed;
       if (screenX > width + 100) break;
       if (screenX < -100) continue;
-      if (el.hit && el.hitType !== 'miss') continue;
+
+      if (el.hit && el.hitType !== 'miss') {
+        // brief flash on the ground where the dot just bounced off this spike
+        const sinceLanding = songTime - el.time;
+        if (sinceLanding >= 0 && sinceLanding < 0.18) {
+          const flashAlpha = 1 - sinceLanding / 0.18;
+          ctx.save();
+          ctx.globalAlpha = flashAlpha * 0.6;
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#ffffff';
+          ctx.shadowBlur = 24;
+          ctx.beginPath();
+          ctx.arc(screenX, groundY, DOT_RADIUS * 1.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        continue;
+      }
 
       let alpha = 1;
       if (el.dissolved) {
@@ -991,7 +1047,7 @@ const Game = (() => {
       }
 
       const c = SECTION_COLORS[el.section] || secColor;
-      const glow = clamp(1 - Math.abs(songTime - visualTime) / 0.3, 0, 1);
+      const glow = clamp(1 - Math.abs(songTime - el.time) / 0.3, 0, 1);
 
       const spikeH = 40 + (el.energy || 0.5) * 30;
       const spikeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.7)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
@@ -1038,18 +1094,31 @@ const Game = (() => {
 
   function renderDot(songTime, skin) {
     let dotY = groundY - DOT_RADIUS;
+    const isAirborne = session.ballState === 'bounce';
     let arcT = 0;
-    if (session.isJumping) {
-      arcT = clamp((songTime - session.jumpStartSongTime) / session.jumpDuration, 0, 1);
-      dotY -= Math.sin(arcT * Math.PI) * height * JUMP_HEIGHT_RATIO;
+    let rotation = 0;
+
+    if (isAirborne) {
+      const next = session.track[session.trackIndex];
+      const start = session.arcStartTime;
+      const end = next ? next.time : start + session.beatInterval;
+      const span = Math.max(0.001, end - start);
+      arcT = clamp((songTime - start) / span, 0, 1);
+      const gapBeats = span / session.beatInterval;
+      let arcHeightRatio = clamp(ARC_HEIGHT_RATIO * gapBeats, ARC_HEIGHT_MIN_RATIO, ARC_HEIGHT_MAX_RATIO);
+      if (session.arcGrade === 'good') arcHeightRatio *= GOOD_ARC_SCALE;
+      dotY -= Math.sin(arcT * Math.PI) * height * arcHeightRatio;
+      rotation = arcT * Math.PI * 0.5;
+    } else {
+      rotation = session.rollTimeSec * 8;
     }
     session.dotY = dotY;
 
     let alpha = 1;
-    if (session.modifiers.has('ghostDot') && session.isJumping) alpha = 0.12;
+    if (session.modifiers.has('ghostDot') && isAirborne) alpha = 0.12;
 
     let scaleX = 1, scaleY = 1;
-    if (session.isJumping) {
+    if (isAirborne) {
       if (arcT < 0.12) { const k = arcT / 0.12; scaleX = lerp(1.3, 1, k); scaleY = lerp(0.7, 1, k); }
       else if (arcT > 0.88) { const k = (arcT - 0.88) / 0.12; scaleX = lerp(1, 1.3, k); scaleY = lerp(1, 0.7, k); }
     }
@@ -1059,6 +1128,7 @@ const Game = (() => {
     ctx.shadowColor = session.accentColor;
     ctx.shadowBlur = 16;
     ctx.translate(dotX, dotY);
+    ctx.rotate(rotation);
     ctx.scale(scaleX, scaleY);
     const renderer = SKIN_RENDERERS[skin] || SKIN_RENDERERS.classic;
     renderer(ctx, 0, 0, DOT_RADIUS, session.accentColor, songTime);
@@ -1095,15 +1165,17 @@ const Game = (() => {
 
   function renderPopupsFn() {
     for (const p of popups) {
-      const scale = p.life > 0.85 ? lerp(2.2, 1, (1 - p.life) / 0.15) : 1;
+      const baseScale = p.big ? 1.6 : 1;
+      const popInScale = p.big ? 3 : 2.2;
+      const scale = p.life > 0.85 ? lerp(popInScale, baseScale, (1 - p.life) / 0.15) : baseScale;
       ctx.save();
       ctx.globalAlpha = clamp(p.life * 1.5, 0, 1);
       ctx.translate(p.x, p.y);
       ctx.scale(scale, scale);
       ctx.fillStyle = p.color;
-      ctx.font = 'bold 18px "Courier New", monospace';
+      ctx.font = p.big ? 'bold 42px "Courier New", monospace' : 'bold 18px "Courier New", monospace';
       ctx.textAlign = 'center';
-      ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+      ctx.shadowColor = p.color; ctx.shadowBlur = p.big ? 18 : 8;
       ctx.fillText(p.text, 0, 0);
       ctx.restore();
     }
@@ -1177,6 +1249,7 @@ const Game = (() => {
     const bgPulse = clamp(Math.max(getBeatPulse(songTime), getLiveBassLevel() * 0.9), 0, 1);
 
     ctx.save();
+    if (session.desaturation > 0.001) ctx.filter = `grayscale(${Math.round(session.desaturation * 100)}%)`;
     let shakeX = 0, shakeY = 0;
     if (session.screenShakeMag > 0) {
       shakeX = (Math.random() * 2 - 1) * session.screenShakeMag;

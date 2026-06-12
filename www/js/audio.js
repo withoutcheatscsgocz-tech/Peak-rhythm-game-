@@ -716,12 +716,20 @@ const AudioEngine = (() => {
     source.buffer = audioBuffer;
     source.playbackRate.value = opts.playbackRate || 1;
 
+    const baseGain = opts.muted ? 0 : (opts.gain != null ? opts.gain : 1);
     const masterGain = audioCtx.createGain();
-    masterGain.gain.value = opts.muted ? 0 : (opts.gain != null ? opts.gain : 1);
+    masterGain.gain.value = baseGain;
 
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.65;
+
+    // B2 fail effect: lowpass filter (muffled "underwater" tone) the chain
+    // routes through on every miss, opened back up on recovery.
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 22000;
+    filter.Q.value = 0.7;
 
     if (opts.reverb) {
       const dryGain = audioCtx.createGain();
@@ -733,21 +741,69 @@ const AudioEngine = (() => {
       source.connect(dryGain);
       source.connect(convolver);
       convolver.connect(wetGain);
-      dryGain.connect(masterGain);
-      wetGain.connect(masterGain);
+      dryGain.connect(filter);
+      wetGain.connect(filter);
     } else {
-      source.connect(masterGain);
+      source.connect(filter);
     }
 
+    filter.connect(masterGain);
     masterGain.connect(analyser);
     analyser.connect(audioCtx.destination);
 
-    return { source, masterGain, analyser };
+    // B2 fail effect: a slow detune wobble layered on top of the lowpass,
+    // depth ramped in/out alongside the filter.
+    const detuneLfo = audioCtx.createOscillator();
+    detuneLfo.frequency.value = 5;
+    const detuneDepth = audioCtx.createGain();
+    detuneDepth.gain.value = 0;
+    detuneLfo.connect(detuneDepth);
+    detuneDepth.connect(source.detune);
+    detuneLfo.start();
+
+    return { source, masterGain, analyser, filter, detuneLfo, detuneDepth, baseGain };
+  }
+
+  /** B2: enter the rolling/fail state - underwater lowpass + detune wobble fade in. */
+  function enterFailEffect(playback, time) {
+    const filterFreq = playback.filter.frequency;
+    filterFreq.cancelScheduledValues(time);
+    filterFreq.setValueAtTime(filterFreq.value, time);
+    filterFreq.linearRampToValueAtTime(500, time + 0.15);
+
+    const depth = playback.detuneDepth.gain;
+    depth.cancelScheduledValues(time);
+    depth.setValueAtTime(depth.value, time);
+    depth.linearRampToValueAtTime(25, time + 0.15);
+
+    const gain = playback.masterGain.gain;
+    gain.cancelScheduledValues(time);
+    gain.setValueAtTime(gain.value, time);
+    gain.linearRampToValueAtTime(playback.baseGain * 0.7, time + 0.15);
+  }
+
+  /** B2: recover from the rolling/fail state - fade the underwater effect back out. */
+  function exitFailEffect(playback, time) {
+    const filterFreq = playback.filter.frequency;
+    filterFreq.cancelScheduledValues(time);
+    filterFreq.setValueAtTime(filterFreq.value, time);
+    filterFreq.linearRampToValueAtTime(22000, time + 0.15);
+
+    const depth = playback.detuneDepth.gain;
+    depth.cancelScheduledValues(time);
+    depth.setValueAtTime(depth.value, time);
+    depth.linearRampToValueAtTime(0, time + 0.15);
+
+    const gain = playback.masterGain.gain;
+    gain.cancelScheduledValues(time);
+    gain.setValueAtTime(gain.value, time);
+    gain.linearRampToValueAtTime(playback.baseGain, time + 0.15);
   }
 
   return {
     getContext, decodeFile, hashAudioBuffer, mixToMono, analyze,
     createReverbImpulse, playTick, playClick, playGuideTick, createPlaybackChain,
+    enterFailEffect, exitFailEffect,
     generateClickTrack,
     playBassThump,
     normalizeTunerSettings, defaultTunerSettings,
