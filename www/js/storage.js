@@ -328,6 +328,10 @@ const Storage = (() => {
   // ---------------- stats ----------------
   function getStats() { return load().stats; }
 
+  // ---------------- tutorial flag ----------------
+  function isTutorialDone() { return !!load().tutorialDone; }
+  function markTutorialDone() { load().tutorialDone = true; save(); }
+
   return {
     load, save,
     getSettings, setSetting,
@@ -338,6 +342,7 @@ const Storage = (() => {
     getTunerSettings, setTunerSettings,
     getCachedSong, cacheSongAnalysis, getLibrarySongs,
     getStats,
+    isTutorialDone, markTutorialDone,
     SKIN_UNLOCK_ACHIEVEMENT,
   };
 })();

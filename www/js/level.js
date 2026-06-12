@@ -28,13 +28,15 @@ const Level = (() => {
   }
 
   /**
-   * Generates the track from the analyzed beat grid (PART A):
-   *  - `analysis.beatGrid` is the canonical, drift-aware grid produced by
-   *    the DP beat tracker - every grid beat -> a spike/doubleSpike/gap
-   *    obstacle, guaranteeing spikes always land exactly on the beat.
-   *  - `analysis.beats[i].bass` (aligned 1:1 with beatGrid) is the
-   *    normalized bass-band energy at that grid slot, used only to pick
-   *    how "strong" the kick is (for obstacle-type weighting).
+   * Generates the track from analyzed onset EVENTS (rhythm v3):
+   *  - `analysis.events` are real audible hits in the song's dominant
+   *    band (kicks/snares/vocal stabs), detected at their true times -
+   *    every event becomes exactly one obstacle, so the ball always
+   *    bounces on a sound. Beats with no audible hit get NO obstacle.
+   *  - `event.strength` (0..1, normalized onset salience) picks the
+   *    obstacle type; sections add variety weighting.
+   *  - Falls back to the per-beat grid for analyses without events
+   *    (sync-test click track, old cached songs).
    *
    * track[]: { time, type:'strong', obstacleType, energy, section, index }
    * checkpoints[]: times (sec), snapped to the nearest beat, every ~20s
@@ -42,33 +44,32 @@ const Level = (() => {
   function generate(analysis, songHash) {
     const rng = mulberry32(hashToSeed(songHash || 'oneDot'));
 
-    const beats = analysis.beats || [];
-    const grid = (analysis.beatGrid && analysis.beatGrid.length) ? analysis.beatGrid : beats.map(b => b.time);
-    const medianBassEnergy = median(beats.map(b => (b.bass != null ? b.bass : b.energy || 0))) || 0.5;
-    const sections = analysis.sections || [];
-    const sectionDuration = (sections[0] && sections[0].duration) || 2;
+    let events = analysis.events;
+    if (!events || !events.length) {
+      const beats = analysis.beats || [];
+      events = beats
+        .filter(b => b.type !== 'weak')
+        .map(b => ({ time: b.time, strength: b.bass != null ? b.bass : (b.energy || 0.5), section: b.section }));
+      if (!events.length) events = beats.map(b => ({ time: b.time, strength: 0.5, section: b.section }));
+    }
 
-    const sectionAt = (time) => {
-      if (!sections.length) return 'chill';
-      const idx = Math.min(sections.length - 1, Math.floor(time / sectionDuration));
-      return sections[idx].type;
-    };
+    // the song needs a moment to breathe before the first obstacle
+    const playable = events.filter(e => e.time >= 1.0);
 
-    const track = grid.map((time, i) => {
-      const beat = beats[i];
-      const energy = beat && beat.bass != null ? beat.bass : medianBassEnergy * 0.5;
-      const section = (beat && beat.section) || sectionAt(time);
+    const track = playable.map((e, i) => {
+      const energy = e.strength != null ? e.strength : 0.5;
+      const section = e.section || 'chill';
       const r = rng();
-      const strongKick = energy >= medianBassEnergy * 1.2;
+      const strongHit = energy >= 0.55;
       let obstacleType;
       if (section === 'drop') {
-        obstacleType = r < (strongKick ? 0.65 : 0.45) ? 'doubleSpike' : (r < 0.75 ? 'gap' : 'spike');
+        obstacleType = r < (strongHit ? 0.65 : 0.45) ? 'doubleSpike' : (r < 0.75 ? 'gap' : 'spike');
       } else if (section === 'build') {
-        obstacleType = r < (strongKick ? 0.5 : 0.3) ? 'doubleSpike' : (r < 0.45 ? 'gap' : 'spike');
+        obstacleType = r < (strongHit ? 0.5 : 0.3) ? 'doubleSpike' : (r < 0.45 ? 'gap' : 'spike');
       } else {
-        obstacleType = r < (strongKick ? 0.3 : 0.12) ? 'doubleSpike' : 'spike';
+        obstacleType = r < (strongHit ? 0.3 : 0.12) ? 'doubleSpike' : 'spike';
       }
-      return { time, type: 'strong', obstacleType, energy, section, index: i };
+      return { time: e.time, type: 'strong', obstacleType, energy, section, index: i };
     });
 
     const checkpoints = buildCheckpoints(track, analysis.duration);

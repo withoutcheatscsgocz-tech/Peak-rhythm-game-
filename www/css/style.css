@@ -309,6 +309,12 @@ input[type="range"] {
 .hud-mult.rolling { color: #ff3b3b; animation: rollPulse 0.6s ease-in-out infinite; }
 @keyframes rollPulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
+.btn.attention { animation: attentionGlow 1.6s ease-in-out infinite; }
+@keyframes attentionGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50% { box-shadow: 0 0 18px var(--accent); }
+}
+
 .icon-btn {
   position: absolute; top: calc(10px + var(--safe-area-top)); right: 14px;
   width: 40px; height: 40px; border-radius: 50%;

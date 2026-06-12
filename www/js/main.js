@@ -67,6 +67,7 @@ const App = (() => {
     bindInput();
     bindVisibility();
     bindGamepad();
+    if (!Storage.isTutorialDone()) $('tutorial-btn').classList.add('attention');
     if (Storage.getSettings().listenEnabled) {
       startListenMode().catch(() => {
         Storage.setSetting('listenEnabled', false);
@@ -145,6 +146,9 @@ const App = (() => {
         break;
       case 'sync-test':
         startSyncTest();
+        break;
+      case 'tutorial':
+        startTutorial();
         break;
       case 'toggle-listen':
         toggleListenMode();
@@ -317,7 +321,8 @@ const App = (() => {
       const hash = AudioEngine.hashAudioBuffer(audioBuffer);
       const cached = Storage.getCachedSong(hash);
       let analysis, levelData;
-      if (cached) {
+      // analyses without `events` predate the rhythm-v3 pipeline - re-analyze
+      if (cached && cached.analysis && cached.analysis.events && cached.analysis.events.length) {
         $('analyzing-title').textContent = 'LOADED FROM LIBRARY';
         $('analyze-pct').textContent = '100%';
         analysis = cached.analysis;
@@ -356,6 +361,48 @@ const App = (() => {
       UI.resetNav();
       UI.showScreen('screen-start', false);
       resetSessionState();
+    }
+  }
+
+  // ---------------- tutorial ----------------
+  const TUTORIAL_HINTS = [
+    { time: 0.2, text: 'TAP WHEN A SPIKE REACHES THE BALL' },
+    { time: 10.5, text: 'PERFECT TAPS = BIG BOUNCES + MORE POINTS' },
+    { time: 11.4, text: 'SPIKES NOW COME EVERY 2ND BEAT' },
+    { time: 21, text: 'EVERY BEAT NOW - RIDE THE RHYTHM' },
+    { time: 32.5, text: 'MISSED? THE BALL ROLLS - TAP A SPIKE TO BOUNCE BACK' },
+  ];
+  let tutorialHintIndex = 0;
+
+  async function startTutorial() {
+    UI.showScreen('screen-analyzing', false);
+    $('analyzing-title').textContent = 'PREPARING TUTORIAL...';
+    $('analyze-file-name').textContent = 'LESSON: BOUNCE ON THE BEAT';
+    $('analyze-pct').textContent = '';
+    try {
+      const { buffer, analysis } = await AudioEngine.generateTutorialTrack();
+      const levelData = Level.generate(analysis, 'tutorial');
+      current.mode = 'tutorial';
+      current.audioBuffer = buffer;
+      current.analysis = analysis;
+      current.levelData = levelData;
+      current.songHash = 'tutorial';
+      current.songName = 'TUTORIAL';
+      tutorialHintIndex = 0;
+      // noFail: never restart during the lesson, only roll + recover
+      await startCountdown({ modifiers: new Set(['noFail']) });
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not start tutorial.');
+      UI.resetNav();
+      resetToStart();
+    }
+  }
+
+  function maybeShowTutorialHint(songTime) {
+    while (tutorialHintIndex < TUTORIAL_HINTS.length && songTime >= TUTORIAL_HINTS[tutorialHintIndex].time) {
+      UI.showToast(TUTORIAL_HINTS[tutorialHintIndex].text);
+      tutorialHintIndex++;
     }
   }
 
@@ -500,7 +547,10 @@ const App = (() => {
 
   // ---------------- game callbacks ----------------
   function bindGameCallbacks() {
-    Game.onUpdateHUD = (state) => UI.updateHUD(state);
+    Game.onUpdateHUD = (state) => {
+      UI.updateHUD(state);
+      if (current.mode === 'tutorial') maybeShowTutorialHint(state.songTime);
+    };
     Game.onComboMilestone = () => UI.flashCombo();
     Game.onMiss = () => {};
     Game.onRecovery = () => UI.showToast('BACK ON TRACK');
@@ -542,6 +592,14 @@ const App = (() => {
       UI.resetNav();
       UI.showScreen('screen-settings', false);
       resetSessionState();
+      return;
+    }
+    if (current.mode === 'tutorial') {
+      Storage.markTutorialDone();
+      $('tutorial-btn').classList.remove('attention');
+      UI.showToast(result.finished ? 'TUTORIAL COMPLETE - UPLOAD A SONG!' : 'TUTORIAL ENDED');
+      UI.resetNav();
+      resetToStart();
       return;
     }
 

@@ -128,20 +128,29 @@ const AudioEngine = (() => {
   }
 
   /**
-   * Real beat-tracking analysis pipeline (PART A):
-   *  1. ONSET ENVELOPE: spectral flux (frame-to-frame magnitude-spectrum
-   *     increase, half-wave rectified, log-compressed) via FFT at a
-   *     ~11.6ms hop (1024-sample frames, 512 hop @ 44.1kHz).
-   *  2. TEMPO: autocorrelation of the envelope over 60-180 BPM with
-   *     octave-error correction (prefers 90-150 BPM on near-ties).
-   *  3. BEAT GRID: a dynamic-programming beat tracker (Ellis 2007) places a
-   *     regular grid that maximizes onset strength at beat positions,
-   *     re-estimating the local tempo in ~10s windows to follow slow drift.
-   *  4. Every grid beat carries normalized bass/vocal/high band energies so
-   *     Level.generate can decide WHAT goes on each slot - timing always
-   *     comes from the grid (`beatGrid`/`beats[].time`), never raw onsets.
+   * Beat analysis pipeline (rhythm v3 - onset events first, grid second):
+   *  1. BAND NOVELTY: spectral-flux onset envelopes for low (kick/808),
+   *     mid (vocals/melodic) and high (snare/hats) bands at a ~11.6ms hop,
+   *     locally mean-subtracted so only real attacks survive.
+   *  2. DOMINANT MIX: drums lead whenever the low band carries real onset
+   *     energy (nearly all music); otherwise the busiest band leads (vocal
+   *     or percussion-only material). Gameplay events come from this mix.
+   *  3. EVENTS: every clear onset peak becomes a gameplay event at its TRUE
+   *     detected time (latency-calibrated on synthetic clicks). Obstacles
+   *     are placed ONLY on events - the ball bounces exactly on audible
+   *     hits, syncopation included, never on silence.
+   *  4. TEMPO: harmonic-reinforced autocorrelation -> octave correction
+   *     from the events' own spacing -> comb-fold fine refinement (a wrong
+   *     period smears the fold peak, so sharpness pins the period
+   *     precisely). Phase = fold peak position.
+   *  5. SNAP + BEATS: events within 30ms of an eighth-note line are pulled
+   *     onto it (cosmetic); the beat grid drives metronome/guide/ring.
    * `confidence`/`gridStability` feed the A5 QA check (weak-beat warning).
    */
+  // Spectral flux sees an attack's rising edge slightly before its
+  // perceptual center; measured as -12ms on synthetic clicks.
+  const ONSET_LATENCY_CORRECTION = 0.012;
+
   async function analyze(audioBuffer, tunerSettings, onProgress) {
     const t = normalizeTunerSettings(tunerSettings);
     const sampleRate = audioBuffer.sampleRate;
@@ -150,30 +159,28 @@ const AudioEngine = (() => {
     const mid = mixToMono(audioBuffer);
     if (onProgress) onProgress(0.02);
 
-    // ---- onset envelope + per-frame band energies (FFT spectral flux) ----
+    // ---- 1. band spectral-flux envelopes ----
     const FFT_SIZE = 1024;
     const HOP = 512;
     const hopTime = HOP / sampleRate;
-    const numFrames = Math.max(1, Math.floor(Math.max(0, length - FFT_SIZE) / HOP) + 1);
+    const numFrames = Math.max(2, Math.floor(Math.max(0, length - FFT_SIZE) / HOP) + 1);
     const numBins = FFT_SIZE / 2 + 1;
 
     const win = hannWindow(FFT_SIZE);
     const re = new Float64Array(FFT_SIZE);
     const im = new Float64Array(FFT_SIZE);
     const prevMag = new Float64Array(numBins);
-    const flux = new Float64Array(numFrames);
-    const bassEnergy = new Float64Array(numFrames);
-    const vocalEnergy = new Float64Array(numFrames);
-    const highEnergy = new Float64Array(numFrames);
+    const lowFluxRaw = new Float64Array(numFrames);
+    const midFluxRaw = new Float64Array(numFrames);
+    const highFluxRaw = new Float64Array(numFrames);
     const totalEnergy = new Float64Array(numFrames);
 
     const binHz = sampleRate / FFT_SIZE;
-    const bassLoBin = Math.max(1, Math.round(40 / binHz));
-    const bassHiBin = Math.max(bassLoBin, Math.round(150 / binHz));
-    const vocalLoBin = Math.max(bassHiBin + 1, Math.round(300 / binHz));
-    const vocalHiBin = Math.max(vocalLoBin, Math.round(3000 / binHz));
-    const highLoBin = Math.max(vocalHiBin + 1, Math.round(3000 / binHz));
-    const highHiBin = Math.min(numBins - 1, Math.round(10000 / binHz));
+    const lowHiBin = Math.max(2, Math.round(150 / binHz));
+    const midLoBin = Math.round(250 / binHz);
+    const midHiBin = Math.round(2200 / binHz);
+    const highLoBin = midHiBin + 1;
+    const highHiBin = Math.min(numBins - 1, Math.round(9000 / binHz));
 
     for (let f = 0; f < numFrames; f++) {
       const start = f * HOP;
@@ -184,274 +191,283 @@ const AudioEngine = (() => {
       }
       fftInPlace(re, im);
 
-      let fluxSum = 0, bassSum = 0, vocalSum = 0, highSum = 0, total = 0;
-      for (let k = 0; k < numBins; k++) {
+      let lowSum = 0, midSum = 0, highSum = 0, total = 0;
+      for (let k = 1; k < numBins; k++) {
         const mag = Math.hypot(re[k], im[k]);
         const diff = mag - prevMag[k];
-        if (diff > 0) fluxSum += diff;
-        const power = mag * mag;
-        total += power;
-        if (k >= bassLoBin && k <= bassHiBin) bassSum += power;
-        if (k >= vocalLoBin && k <= vocalHiBin) vocalSum += power;
-        if (k >= highLoBin && k <= highHiBin) highSum += power;
+        if (diff > 0) {
+          if (k <= lowHiBin) lowSum += diff;
+          else if (k >= midLoBin && k <= midHiBin) midSum += diff;
+          else if (k >= highLoBin && k <= highHiBin) highSum += diff;
+        }
+        total += mag * mag;
         prevMag[k] = mag;
       }
-      flux[f] = Math.log1p(fluxSum);
-      bassEnergy[f] = bassSum;
-      vocalEnergy[f] = vocalSum;
-      highEnergy[f] = highSum;
+      lowFluxRaw[f] = lowSum;
+      midFluxRaw[f] = midSum;
+      highFluxRaw[f] = highSum;
       totalEnergy[f] = total;
 
       if (onProgress && (f & 1023) === 0) {
-        onProgress(0.05 + 0.55 * (f / numFrames));
+        onProgress(0.05 + 0.5 * (f / numFrames));
         await yieldToUI();
       }
     }
-    if (onProgress) onProgress(0.6);
+    if (onProgress) onProgress(0.55);
 
-    // beat tuner "sensitivity": scales the onset-envelope data term relative
-    // to the DP's fixed spacing penalty below - higher follows raw onsets
-    // more closely, lower sticks closer to a strict regular grid.
-    const sensitivity = t.bass.sensitivity || 1;
-    for (let f = 0; f < numFrames; f++) flux[f] *= sensitivity;
-
-    // ---- tempo estimation: autocorrelation + octave-error correction ----
-    const fluxMean = mean(flux);
-    const centered = new Float64Array(numFrames);
-    for (let f = 0; f < numFrames; f++) centered[f] = flux[f] - fluxMean;
-
-    function autocorr(lag) {
-      let sum = 0;
-      const n = numFrames - lag;
-      for (let i = 0; i < n; i++) sum += centered[i] * centered[i + lag];
-      return n > 0 ? sum / n : 0;
+    // log-compress + subtract a ~0.45s moving average -> clean novelty peaks
+    function toNovelty(raw) {
+      const n = raw.length;
+      const logd = new Float64Array(n);
+      for (let i = 0; i < n; i++) logd[i] = Math.log1p(raw[i]);
+      const W = Math.max(1, Math.round(0.45 / hopTime));
+      const prefix = new Float64Array(n + 1);
+      for (let i = 0; i < n; i++) prefix[i + 1] = prefix[i] + logd[i];
+      const out = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const lo = Math.max(0, i - W), hi = Math.min(n, i + W + 1);
+        const local = (prefix[hi] - prefix[lo]) / (hi - lo);
+        const v = logd[i] - local;
+        out[i] = v > 0 ? v : 0;
+      }
+      return out;
     }
+
+    const lowNov = toNovelty(lowFluxRaw);
+    const midNov = toNovelty(midFluxRaw);
+    const highNov = toNovelty(highFluxRaw);
+    const combNov = new Float64Array(numFrames);
+    for (let i = 0; i < numFrames; i++) combNov[i] = lowNov[i] + 0.8 * midNov[i] + 0.6 * highNov[i];
+
+    // ---- 2. dominant mix: drums lead if the low band has real onsets ----
+    let lowTotal = 0, midTotal = 0, highTotal = 0, combTotal = 0;
+    for (let i = 0; i < numFrames; i++) {
+      lowTotal += lowNov[i]; midTotal += midNov[i]; highTotal += highNov[i]; combTotal += combNov[i];
+    }
+    let dominantBand = 'low';
+    if (combTotal > 1e-9 && lowTotal < 0.18 * combTotal) {
+      dominantBand = midTotal >= highTotal ? 'mid' : 'high';
+    }
+    const domNov = dominantBand === 'low' ? lowNov : (dominantBand === 'mid' ? midNov : highNov);
+    const gameNov = new Float64Array(numFrames);
+    for (let i = 0; i < numFrames; i++) {
+      const assist = dominantBand === 'low'
+        ? 0.55 * highNov[i] + 0.3 * midNov[i]
+        : (dominantBand === 'mid' ? 0.5 * lowNov[i] + 0.3 * highNov[i] : 0.5 * lowNov[i] + 0.3 * midNov[i]);
+      gameNov[i] = domNov[i] + assist;
+    }
+
+    // ---- 3. onset events at true detected times ----
+    const nz = [];
+    for (let i = 0; i < numFrames; i++) if (gameNov[i] > 0) nz.push(gameNov[i]);
+    nz.sort((a, b) => a - b);
+    const p90 = nz.length ? nz[Math.floor(nz.length * 0.9)] : 0;
+    const sensitivity = t.bass.sensitivity || 1.3;
+    const floor = p90 * (0.45 / Math.max(0.3, sensitivity));
+
+    const W2 = Math.max(1, Math.round(0.35 / hopTime));
+    const prefix2 = new Float64Array(numFrames + 1);
+    for (let i = 0; i < numFrames; i++) prefix2[i + 1] = prefix2[i] + gameNov[i];
+
+    const rawOnsets = [];
+    for (let i = 2; i < numFrames - 2; i++) {
+      const v = gameNov[i];
+      if (v < floor) continue;
+      if (v < gameNov[i - 1] || v < gameNov[i + 1] || v <= gameNov[i - 2] || v <= gameNov[i + 2]) continue;
+      const lo = Math.max(0, i - W2), hi = Math.min(numFrames, i + W2 + 1);
+      const localMean = (prefix2[hi] - prefix2[lo]) / (hi - lo);
+      if (v < localMean * 1.5) continue;
+      // refine peak time: weighted centroid of the 3 frames around the max
+      const c = (gameNov[i - 1] * (i - 1) + v * i + gameNov[i + 1] * (i + 1)) / (gameNov[i - 1] + v + gameNov[i + 1]);
+      rawOnsets.push({ time: c * hopTime + ONSET_LATENCY_CORRECTION, strength: v });
+    }
+    if (onProgress) { onProgress(0.62); await yieldToUI(); }
+
+    // ---- 4. tempo: ACF -> octave fix from event spacing -> fold refine ----
+    const novMean = mean(combNov);
+    const centered = new Float64Array(numFrames);
+    for (let i = 0; i < numFrames; i++) centered[i] = combNov[i] - novMean;
+
+    function acfAtLag(lag) {
+      const li = Math.floor(lag), frac = lag - li;
+      const n = numFrames - li - 1;
+      if (li < 1 || n < 16) return 0;
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        const v = centered[i + li] * (1 - frac) + centered[i + li + 1] * frac;
+        sum += centered[i] * v;
+      }
+      return sum / n;
+    }
+
+    let acf0 = 0;
+    for (let i = 0; i < numFrames; i++) acf0 += centered[i] * centered[i];
+    acf0 = acf0 / numFrames || 1e-9;
 
     const MIN_BPM = 60, MAX_BPM = 180;
-    // beat tuner "min spacing": narrows the upper end of the tempo search
-    const tunerMaxBpm = Math.max(MIN_BPM, Math.min(220, 60 / Math.max(0.05, t.bass.minSpacing || 0.25)));
-    const bpmHigh = Math.min(MAX_BPM, tunerMaxBpm);
-    let lagMin = Math.max(1, Math.floor((60 / bpmHigh) / hopTime));
-    let lagMax = Math.min(numFrames - 1, Math.ceil((60 / MIN_BPM) / hopTime));
-    if (lagMax < lagMin) lagMax = lagMin;
+    let bestBpm = 120, bestScore = -Infinity;
+    for (let b = MIN_BPM; b <= MAX_BPM; b += 0.5) {
+      const lag = (60 / b) / hopTime;
+      const score = acfAtLag(lag) + 0.5 * acfAtLag(lag * 2) + 0.33 * acfAtLag(lag * 3) + 0.25 * acfAtLag(lag / 2);
+      if (score > bestScore) { bestScore = score; bestBpm = b; }
+    }
+    const confidence = clamp01(acfAtLag((60 / bestBpm) / hopTime) / acf0);
 
-    const acf0 = autocorr(0) || 1e-9;
-    let bpm = 120, confidence = 0, globalPeriodFrames = (60 / 120) / hopTime;
-
-    if (numFrames > lagMax + 1 && lagMax >= 1) {
-      let bestLag = lagMin, bestVal = -Infinity;
-      for (let lag = lagMin; lag <= lagMax; lag++) {
-        const v = autocorr(lag);
-        if (v > bestVal) { bestVal = v; bestLag = lag; }
+    // octave correction: if events sit twice per beat, the real tempo is 2x
+    if (rawOnsets.length > 8) {
+      const ivals = [];
+      for (let i = 1; i < rawOnsets.length; i++) {
+        const d = rawOnsets[i].time - rawOnsets[i - 1].time;
+        if (d > 0.1 && d < 2.5) ivals.push(d);
       }
-      const bpmRaw = 60 / (bestLag * hopTime);
+      ivals.sort((a, b) => a - b);
+      const medIval = ivals.length ? ivals[Math.floor(ivals.length / 2)] : 60 / bestBpm;
+      if (medIval <= 0.6 * (60 / bestBpm) && bestBpm * 2 <= 200) bestBpm *= 2;
+      else if (medIval >= 1.6 * (60 / bestBpm) && bestBpm / 2 >= 55) bestBpm /= 2;
+    }
 
-      const valAtBpm = (b) => {
-        const lag = Math.round(60 / (b * hopTime));
-        if (lag < 1 || lag >= numFrames) return -Infinity;
-        return autocorr(lag);
-      };
-
-      const candidates = [{ bpm: bpmRaw, val: bestVal }];
-      if (bpmRaw * 2 <= 220) candidates.push({ bpm: bpmRaw * 2, val: valAtBpm(bpmRaw * 2) });
-      if (bpmRaw / 2 >= 40) candidates.push({ bpm: bpmRaw / 2, val: valAtBpm(bpmRaw / 2) });
-
-      let chosen = candidates[0];
-      for (const c of candidates) if (c.val > chosen.val) chosen = c;
-      for (const c of candidates) {
-        if (c.bpm >= 90 && c.bpm <= 150 && c.val >= chosen.val * 0.85 && c !== chosen) { chosen = c; break; }
+    // fold fine refinement: a wrong period smears the fold peak over the
+    // whole song, so sharpness pins the true period very precisely
+    function foldAt(env, periodFrames) {
+      const nb = Math.max(8, Math.round(periodFrames));
+      const acc = new Float64Array(nb);
+      const inv = nb / periodFrames;
+      for (let f = 0; f < numFrames; f++) {
+        if (env[f] === 0) continue;
+        const ph = f - Math.floor(f / periodFrames) * periodFrames;
+        let b = Math.floor(ph * inv); if (b >= nb) b = nb - 1;
+        acc[b] += env[f];
       }
-
-      bpm = chosen.bpm;
-      while (bpm < MIN_BPM) bpm *= 2;
-      while (bpm > MAX_BPM) bpm /= 2;
-      globalPeriodFrames = (60 / bpm) / hopTime;
-      confidence = clamp01(chosen.val / acf0);
+      let total = 0, best = -1, bi = 0;
+      for (let b = 0; b < nb; b++) { total += acc[b]; if (acc[b] > best) { best = acc[b]; bi = b; } }
+      const prev = acc[(bi + nb - 1) % nb], next = acc[(bi + 1) % nb];
+      const peak = best + 0.5 * (prev + next);
+      const meanv = total / nb;
+      const sharp = meanv > 1e-9 ? peak / (meanv * 2.5) : 0;
+      let frac = 0;
+      const denom = prev - 2 * best + next;
+      if (Math.abs(denom) > 1e-12) frac = Math.max(-0.5, Math.min(0.5, 0.5 * (prev - next) / denom));
+      const phaseFrames = ((bi + frac + 0.5) / inv) % periodFrames;
+      return { sharp, phaseFrames, total };
     }
-    if (onProgress) onProgress(0.65);
 
-    // ---- local tempo curve for slow drift (~10s windows / 5s stride) ----
-    const windowFrames = Math.max(8, Math.round(10 / hopTime));
-    const strideFrames = Math.max(4, Math.round(5 / hopTime));
-    const driftLagLo = Math.max(lagMin, Math.floor(globalPeriodFrames * 0.85));
-    const driftLagHi = Math.min(lagMax, Math.ceil(globalPeriodFrames * 1.15));
-    const localCurve = [];
-    for (let start = 0; start < numFrames; start += strideFrames) {
-      const end = Math.min(numFrames, start + windowFrames);
-      if (end - start < windowFrames * 0.5) break;
-      let bestLag = Math.round(globalPeriodFrames), bestVal = -Infinity;
-      for (let lag = driftLagLo; lag <= driftLagHi && lag < (end - start); lag++) {
-        let sum = 0;
-        const n = (end - start) - lag;
-        for (let i = 0; i < n; i++) sum += centered[start + i] * centered[start + i + lag];
-        const v = n > 0 ? sum / n : 0;
-        if (v > bestVal) { bestVal = v; bestLag = lag; }
+    {
+      const base = (60 / bestBpm) / hopTime;
+      let fineBest = -1, fineP = base;
+      for (let s = -120; s <= 120; s++) {
+        const p = base * (1 + s * 0.0001);
+        const r = foldAt(gameNov, p);
+        if (r.sharp > fineBest) { fineBest = r.sharp; fineP = p; }
       }
-      localCurve.push({ frame: start + (end - start) / 2, period: bestLag });
+      bestBpm = 60 / (fineP * hopTime);
     }
-    if (!localCurve.length) localCurve.push({ frame: numFrames / 2, period: globalPeriodFrames });
+    if (onProgress) { onProgress(0.75); await yieldToUI(); }
 
-    const periodAtFrame = (frame) => {
-      if (frame <= localCurve[0].frame) return localCurve[0].period;
-      for (let i = 1; i < localCurve.length; i++) {
-        if (frame <= localCurve[i].frame) {
-          const a = localCurve[i - 1], b = localCurve[i];
-          const span = b.frame - a.frame;
-          const ratio = span > 0 ? (frame - a.frame) / span : 0;
-          return a.period + (b.period - a.period) * ratio;
-        }
-      }
-      return localCurve[localCurve.length - 1].period;
-    };
-    if (onProgress) onProgress(0.7);
+    const beatSec = 60 / bestBpm;
+    const bpm = bestBpm;
+    const beatPeriodFrames = beatSec / hopTime;
+    const beatFold = foldAt(gameNov, beatPeriodFrames);
+    let beatPhaseSec = (beatFold.phaseFrames * hopTime + ONSET_LATENCY_CORRECTION) % beatSec;
 
-    // ---- DP beat tracking (Ellis 2007): regular grid, max onset strength ----
-    const cumscore = new Float64Array(numFrames);
-    const backlink = new Int32Array(numFrames).fill(-1);
-    const ALPHA = 6; // spacing-penalty tightness
+    // ---- 5. gentle snap (cosmetic only) + spacing + strengths ----
+    const eighthSec = beatSec / 2;
+    const SNAP_TOL = 0.03;
+    let events = rawOnsets.map(o => {
+      const k = Math.round((o.time - beatPhaseSec) / eighthSec);
+      const gridT = beatPhaseSec + k * eighthSec;
+      const useGrid = k >= 0 && Math.abs(gridT - o.time) <= SNAP_TOL;
+      return { time: useGrid ? gridT : o.time, strength: o.strength, snapped: useGrid };
+    }).filter(e => e.time >= 0 && e.time <= duration - 0.05);
 
-    for (let i = 0; i < numFrames; i++) {
-      const tau = Math.max(1, periodAtFrame(i));
-      // keep spacing within the local drift tolerance (no octave jumps to
-      // half/double-time subdivisions - those are decided by Level.generate)
-      const searchLo = Math.max(0, Math.floor(i - tau * 1.15));
-      const searchHi = Math.min(i - 1, Math.floor(i - tau * 0.85));
-      let best = -Infinity, bestJ = -1;
-      for (let j = searchLo; j <= searchHi; j++) {
-        const delta = i - j;
-        const penalty = -ALPHA * Math.pow(Math.log(delta / tau), 2);
-        const score = cumscore[j] + penalty;
-        if (score > best) { best = score; bestJ = j; }
-      }
-      cumscore[i] = flux[i] + Math.max(0, best);
-      backlink[i] = best > 0 ? bestJ : -1;
-
-      if (onProgress && (i & 2047) === 0) {
-        onProgress(0.7 + 0.15 * (i / numFrames));
-        await yieldToUI();
-      }
+    const minSpacing = Math.max(0.16, t.bass.minSpacing != null ? t.bass.minSpacing : 0.18);
+    events.sort((a, b) => a.time - b.time);
+    const spaced = [];
+    for (const e of events) {
+      const last = spaced[spaced.length - 1];
+      if (last && e.time - last.time < minSpacing) {
+        if (e.strength > last.strength) spaced[spaced.length - 1] = e;
+      } else spaced.push(e);
     }
-    if (onProgress) onProgress(0.85);
+    events = spaced;
+    const strengths = events.map(e => e.strength).sort((a, b) => a - b);
+    const sP95 = strengths.length ? strengths[Math.floor(strengths.length * 0.95)] : 1;
+    events.forEach(e => { e.strength = clamp01(e.strength / (sP95 || 1)); });
+    if (onProgress) { onProgress(0.85); await yieldToUI(); }
 
-    // pick the best-scoring frame within the last beat period, then backtrack
-    const lastPeriod = Math.max(1, Math.round(periodAtFrame(numFrames - 1)));
-    let endIdx = numFrames - 1, endVal = -Infinity;
-    for (let i = Math.max(0, numFrames - lastPeriod); i < numFrames; i++) {
-      if (cumscore[i] > endVal) { endVal = cumscore[i]; endIdx = i; }
-    }
-    const beatFramesRev = [];
-    for (let cur = endIdx; cur >= 0; cur = backlink[cur]) beatFramesRev.push(cur);
-    let beatTimes = beatFramesRev.reverse().map(f => f * hopTime);
-    if (!beatTimes.length) beatTimes = [0];
-
-    // ---- quantize: fill skipped beats and extend to cover the whole song,
-    // so every gameplay element snaps to the grid ----
-    const filled = [beatTimes[0]];
-    for (let i = 1; i < beatTimes.length; i++) {
-      const a = filled[filled.length - 1];
-      const b = beatTimes[i];
-      const tau = periodAtFrame(Math.round(((a + b) / 2) / hopTime)) * hopTime;
-      const steps = tau > 0 ? Math.max(1, Math.round((b - a) / tau)) : 1;
-      for (let s = 1; s < steps; s++) filled.push(a + (b - a) * (s / steps));
-      filled.push(b);
-    }
-    beatTimes = filled;
-
-    while (beatTimes[0] > 1e-6) {
-      const tau = periodAtFrame(Math.max(0, Math.round(beatTimes[0] / hopTime))) * hopTime;
-      const next = beatTimes[0] - tau;
-      beatTimes.unshift(Math.max(0, next));
-      if (next <= 0) break;
-    }
-
-    while (beatTimes[beatTimes.length - 1] < duration) {
-      const lastT = beatTimes[beatTimes.length - 1];
-      const tau = periodAtFrame(Math.min(numFrames - 1, Math.round(lastT / hopTime))) * hopTime;
-      if (tau <= 0) break;
-      const next = lastT + tau;
-      if (next > duration + tau * 0.5) break;
-      beatTimes.push(next);
-    }
-
-    beatTimes = beatTimes.filter((v, i, arr) => i === 0 || v > arr[i - 1] + 1e-6);
-    if (onProgress) onProgress(0.9);
-
-    // ---- section detection (intro/chill/build/drop) from total energy ----
+    // ---- sections (intro/chill/build/drop) from total energy ----
     const sectionWindowSec = 2;
     const framesPerSection = Math.max(1, Math.round(sectionWindowSec / hopTime));
     const numSections = Math.max(1, Math.ceil(numFrames / framesPerSection));
-    const sectionEnergy = new Float64Array(numSections);
-    for (let s = 0; s < numSections; s++) {
-      const start = s * framesPerSection;
-      const end = Math.min(numFrames, start + framesPerSection);
-      let sum = 0, count = 0;
-      for (let f = start; f < end; f++) { sum += totalEnergy[f]; count++; }
-      sectionEnergy[s] = count ? sum / count : 0;
-    }
-    let maxSectionEnergy = 1e-9;
-    for (let s = 0; s < numSections; s++) if (sectionEnergy[s] > maxSectionEnergy) maxSectionEnergy = sectionEnergy[s];
     const sections = [];
-    for (let i = 0; i < numSections; i++) {
-      const norm = sectionEnergy[i] / maxSectionEnergy;
-      let type;
-      if (norm < 0.35) type = (i < numSections * 0.12) ? 'intro' : 'chill';
-      else if (norm < 0.65) type = 'build';
-      else type = 'drop';
-      sections.push({ time: i * sectionWindowSec, duration: sectionWindowSec, type, intensity: norm });
+    {
+      const sectionEnergy = new Float64Array(numSections);
+      let maxSectionEnergy = 1e-9;
+      for (let s = 0; s < numSections; s++) {
+        const start = s * framesPerSection;
+        const end = Math.min(numFrames, start + framesPerSection);
+        let sum = 0, count = 0;
+        for (let f = start; f < end; f++) { sum += totalEnergy[f]; count++; }
+        sectionEnergy[s] = count ? sum / count : 0;
+        if (sectionEnergy[s] > maxSectionEnergy) maxSectionEnergy = sectionEnergy[s];
+      }
+      for (let i = 0; i < numSections; i++) {
+        const norm = sectionEnergy[i] / maxSectionEnergy;
+        let type;
+        if (norm < 0.35) type = (i < numSections * 0.12) ? 'intro' : 'chill';
+        else if (norm < 0.65) type = 'build';
+        else type = 'drop';
+        sections.push({ time: i * sectionWindowSec, duration: sectionWindowSec, type, intensity: norm });
+      }
     }
-    const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.floor(time / sectionWindowSec))].type;
+    const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.max(0, Math.floor(time / sectionWindowSec)))].type;
+    events.forEach(e => { e.section = sectionAt(e.time); });
 
-    // ---- per-grid-beat band energies: decide WHAT goes on each slot ----
-    const bassVals = [], vocalVals = [], highVals = [];
-    beatTimes.forEach((time) => {
-      const fIdx = Math.min(numFrames - 1, Math.max(0, Math.round(time / hopTime)));
-      bassVals.push(bassEnergy[fIdx]);
-      vocalVals.push(vocalEnergy[fIdx]);
-      highVals.push(highEnergy[fIdx]);
-    });
-    const maxBass = Math.max(...bassVals, 1e-9);
-    const maxVocal = Math.max(...vocalVals, 1e-9);
-    const maxHigh = Math.max(...highVals, 1e-9);
-    const medianBass = median(bassVals) || 1e-9;
+    // ---- beats[] on the musical grid, with attack info at each slot ----
+    function novAt(env, timeSec) {
+      const c = Math.round(timeSec / hopTime);
+      let v = 0;
+      for (let f = Math.max(0, c - 2); f <= Math.min(numFrames - 1, c + 2); f++) if (env[f] > v) v = env[f];
+      return v;
+    }
+    const beats = [];
+    const eventTimes = events.map(e => e.time);
+    for (let tBeat = beatPhaseSec; tBeat < duration; tBeat += beatSec) {
+      let nearestEvent = Infinity;
+      for (const et of eventTimes) {
+        const d = Math.abs(et - tBeat);
+        if (d < nearestEvent) nearestEvent = d;
+        if (et > tBeat + beatSec) break;
+      }
+      const low = novAt(lowNov, tBeat), midv = novAt(midNov, tBeat), high = novAt(highNov, tBeat);
+      beats.push({
+        time: tBeat,
+        energy: clamp01(low / (p90 || 1)),
+        bass: clamp01(low / (p90 || 1)),
+        vocal: clamp01(midv / (p90 || 1)),
+        high: clamp01(high / (p90 || 1)),
+        type: nearestEvent < beatSec * 0.25 ? 'strong' : 'weak',
+        section: sectionAt(tBeat),
+      });
+    }
+    if (!beats.length) beats.push({ time: 0, energy: 0.5, bass: 0.5, vocal: 0, high: 0, type: 'strong', section: 'chill' });
 
-    const beats = beatTimes.map((time, i) => {
-      const bass = bassVals[i] / maxBass;
-      return {
-        time,
-        energy: bass,
-        bass,
-        vocal: vocalVals[i] / maxVocal,
-        high: highVals[i] / maxHigh,
-        type: bassVals[i] >= medianBass * 1.15 ? 'strong' : 'weak',
-        section: sectionAt(time),
-      };
-    });
     const bassBeats = beats.map(b => ({ time: b.time, energy: b.bass, section: b.section }));
     const beatGrid = beats.map(b => b.time);
 
-    const beatInterval = 60 / bpm;
-    const phase = beatGrid.length ? ((beatGrid[0] % beatInterval) + beatInterval) % beatInterval : 0;
-
-    // ---- A5 QA: grid stability from interval regularity ----
-    let gridStability = 1;
-    if (beatGrid.length > 2) {
-      const intervals = [];
-      for (let i = 1; i < beatGrid.length; i++) intervals.push(beatGrid[i] - beatGrid[i - 1]);
-      const meanInterval = mean(intervals);
-      const variance = mean(intervals.map(v => (v - meanInterval) * (v - meanInterval)));
-      gridStability = meanInterval > 0 ? clamp01(1 - Math.sqrt(variance) / meanInterval) : 0;
-    }
+    const gridStability = clamp01(beatFold.sharp / 2.5) * clamp01(events.length > 8 ? 1 : events.length / 8);
 
     const intensity = sections.reduce((a, s) => a + s.intensity, 0) / sections.length;
     if (onProgress) onProgress(1);
 
     return {
-      bpm: Math.round(bpm),
-      phase,
+      bpm: Math.round(bpm * 10) / 10,
+      phase: beatPhaseSec % beatSec,
       duration,
       beats,
       bassBeats,
       beatGrid,
+      events,
+      dominantBand,
       confidence,
       gridStability,
       sections,
@@ -521,6 +537,7 @@ const AudioEngine = (() => {
     }
     const bassBeats = beats.map(b => ({ time: b.time, energy: b.bass, section: b.section }));
     const beatGrid = beats.map(b => b.time);
+    const events = beats.map(b => ({ time: b.time, strength: b.bass, snapped: true, section: b.section }));
 
     const analysis = {
       bpm,
@@ -529,6 +546,8 @@ const AudioEngine = (() => {
       beats,
       bassBeats,
       beatGrid,
+      events,
+      dominantBand: 'low',
       confidence: 1,
       gridStability: 1,
       sections: [{ time: 0, duration, type: 'chill', intensity: 0.5 }],
@@ -538,6 +557,119 @@ const AudioEngine = (() => {
     };
 
     return { buffer, analysis };
+  }
+
+  /**
+   * TUTORIAL: synthesizes a friendly 100 BPM beat (kick / snare / hats) and
+   * a hand-authored event list that ramps up: every 4th beat -> every 2nd
+   * beat -> every beat -> light syncopation. Returns { buffer, analysis }.
+   */
+  async function generateTutorialTrack() {
+    const bpm = 100;
+    const beatInterval = 60 / bpm; // 0.6s
+    const totalBeats = 72; // ~43s
+    const duration = totalBeats * beatInterval + 1;
+    const sampleRate = 44100;
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(duration * sampleRate), sampleRate);
+
+    for (let i = 0; i < totalBeats; i++) {
+      const t = i * beatInterval;
+      // kick on every beat
+      const osc = offlineCtx.createOscillator();
+      const g = offlineCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(48, t + 0.09);
+      g.gain.setValueAtTime(0.85, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      osc.connect(g); g.connect(offlineCtx.destination);
+      osc.start(t); osc.stop(t + 0.25);
+
+      // snare on 2 and 4
+      if (i % 4 === 2) {
+        const len = Math.floor(0.12 * sampleRate);
+        const nb = offlineCtx.createBuffer(1, len, sampleRate);
+        const nd = nb.getChannelData(0);
+        for (let s = 0; s < len; s++) nd[s] = (Math.random() * 2 - 1) * Math.exp(-s / (0.02 * sampleRate));
+        const src = offlineCtx.createBufferSource();
+        src.buffer = nb;
+        const sg = offlineCtx.createGain();
+        sg.gain.value = 0.5;
+        src.connect(sg); sg.connect(offlineCtx.destination);
+        src.start(t);
+      }
+
+      // light hats on 8ths from beat 32
+      if (i >= 32) {
+        for (let h = 0; h < 2; h++) {
+          const ht = t + h * beatInterval / 2;
+          const len = Math.floor(0.03 * sampleRate);
+          const nb = offlineCtx.createBuffer(1, len, sampleRate);
+          const nd = nb.getChannelData(0);
+          for (let s = 0; s < len; s++) nd[s] = (Math.random() * 2 - 1) * Math.exp(-s / (0.004 * sampleRate));
+          const src = offlineCtx.createBufferSource();
+          src.buffer = nb;
+          const hg = offlineCtx.createGain();
+          hg.gain.value = 0.12;
+          src.connect(hg); hg.connect(offlineCtx.destination);
+          src.start(ht);
+        }
+      }
+    }
+    const buffer = await offlineCtx.startRendering();
+
+    // hand-authored difficulty ramp: which beats carry an obstacle
+    const eventBeats = [];
+    for (let i = 4; i < 20; i += 4) eventBeats.push(i);       // breathe: every 4th
+    for (let i = 20; i < 36; i += 2) eventBeats.push(i);      // every 2nd
+    for (let i = 36; i < 56; i += 1) eventBeats.push(i);      // every beat
+    for (let i = 56; i < 70; i += 2) { eventBeats.push(i); eventBeats.push(i + 1); } // pairs
+
+    const sections = [];
+    const sectionWindow = 2;
+    for (let st = 0; st < duration; st += sectionWindow) {
+      const type = st < 12 ? 'chill' : (st < 21.6 ? 'build' : 'drop');
+      sections.push({ time: st, duration: sectionWindow, type, intensity: st < 12 ? 0.3 : (st < 21.6 ? 0.55 : 0.8) });
+    }
+    const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.floor(time / sectionWindow))].type;
+
+    const events = eventBeats.map(i => ({
+      time: i * beatInterval,
+      strength: i % 4 === 0 ? 1 : 0.6,
+      snapped: true,
+      section: sectionAt(i * beatInterval),
+    }));
+
+    const beats = [];
+    for (let i = 0; i < totalBeats; i++) {
+      const time = i * beatInterval;
+      beats.push({
+        time,
+        energy: 1, bass: 1, vocal: 0, high: i >= 32 ? 0.5 : 0,
+        type: eventBeats.includes(i) ? 'strong' : 'weak',
+        section: sectionAt(time),
+      });
+    }
+
+    return {
+      buffer,
+      analysis: {
+        bpm,
+        phase: 0,
+        duration,
+        beats,
+        bassBeats: beats.map(b => ({ time: b.time, energy: b.bass, section: b.section })),
+        beatGrid: beats.map(b => b.time),
+        events,
+        dominantBand: 'low',
+        confidence: 1,
+        gridStability: 1,
+        sections,
+        intensity: 0.5,
+        sampleRate,
+        waveform: [],
+      },
+    };
   }
 
   // ---------------- procedural white noise buffer ----------------
@@ -805,6 +937,7 @@ const AudioEngine = (() => {
     createReverbImpulse, playTick, playClick, playGuideTick, createPlaybackChain,
     enterFailEffect, exitFailEffect,
     generateClickTrack,
+    generateTutorialTrack,
     playBassThump,
     normalizeTunerSettings, defaultTunerSettings,
     TAP_SOUNDS, playTapSound,

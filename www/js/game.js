@@ -683,6 +683,7 @@ const Game = (() => {
       addPopup(`+good`, dotX, session.dotY - 30, '#aaaaaa');
       spawnBurst(dotX, session.dotY, sectionColorString(el.section, 0.7), 10, 0.8);
       Haptics.tapGood();
+      if (audioCtx) AudioEngine.playTapSound(audioCtx, realNow, Storage.getSettings().tapSound, 0.4);
     }
 
     session.score = Math.round(session.baseScore * session.multiplier);
@@ -693,7 +694,7 @@ const Game = (() => {
   function addComboPopup() {
     if (session.combo < 2) return;
     popups.push({
-      text: `${session.combo}x`, x: dotX, y: session.dotY - 10, life: 1, color: session.accentColor,
+      text: `${session.combo}x`, x: dotX, y: session.dotY - 78, life: 1, color: session.accentColor,
       big: true,
     });
   }
@@ -721,6 +722,7 @@ const Game = (() => {
     spawnBurst(dotX, session.dotY, sectionColorString(el.section, 1), 30, 1.4);
     triggerScreenShake(0.6, realNow);
     Haptics.tapPerfect();
+    if (audioCtx) AudioEngine.playBassThump(audioCtx, realNow, 0.5);
     if (playback) AudioEngine.exitFailEffect(playback, audioCtx.currentTime);
     if (Game.onRecovery) Game.onRecovery(grade);
   }

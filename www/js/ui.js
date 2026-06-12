@@ -215,8 +215,14 @@ const UI = (() => {
     const intensityPct = Math.round(clamp01(analysis.intensity) * 100);
     $('result-intensity').textContent = `${intensityPct}%`;
 
+    // Gameplay rides detected onset events, so a soft ACF confidence alone
+    // is fine - warn only when the song genuinely lacks usable hits.
     const weakWarning = $('result-weak-warning');
-    weakWarning.classList.toggle('hidden', (analysis.confidence == null) || analysis.confidence >= 0.5);
+    const eventsPerSec = (analysis.events && analysis.duration) ? analysis.events.length / analysis.duration : null;
+    const weak = eventsPerSec != null
+      ? (eventsPerSec < 0.5 || ((analysis.confidence || 0) < 0.15 && (analysis.gridStability || 0) < 0.4))
+      : ((analysis.confidence == null) ? false : analysis.confidence < 0.5);
+    weakWarning.classList.toggle('hidden', !weak);
   }
 
   // ---------------- song map preview (minimap of the generated level) ----------------
