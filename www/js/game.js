@@ -228,6 +228,7 @@ const Game = (() => {
   let width = 0, height = 0, dpr = 1;
   let groundY = 0, dotX = 0;
   let prevFrameCanvas = null, prevFrameCtx = null;
+  let lastDesatPct = -1;
 
   let audioCtx = null;
   let playback = null; // { source, masterGain, analyser }
@@ -461,6 +462,8 @@ const Game = (() => {
     if (session && session.micActive) MicEngine.stop();
     if (replayRecorder) { replayRecorder.stop(); replayRecorder = null; }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (canvas) canvas.style.filter = '';
+    lastDesatPct = -1;
   }
 
   function computeSongTime(realNow) {
@@ -1274,6 +1277,19 @@ const Game = (() => {
     }
   }
 
+  // Apply the B2 fail-state desaturation as a CSS filter on the canvas
+  // element rather than ctx.filter: ctx.filter forces the 2D context to
+  // re-rasterize every draw call through a software filter pass (a huge
+  // frame-rate hit on mobile WebViews), whereas an element-level CSS
+  // filter is a single GPU-composited post-effect on the whole layer.
+  function updateDesaturationFilter() {
+    const pct = session.desaturation > 0.001 ? Math.round(session.desaturation * 100) : 0;
+    if (pct !== lastDesatPct) {
+      canvas.style.filter = pct > 0 ? `grayscale(${pct}%)` : '';
+      lastDesatPct = pct;
+    }
+  }
+
   function render(songTime, realNow) {
     const skin = Storage.getSettings().skin;
     const theme = Storage.getSettings().theme;
@@ -1281,8 +1297,8 @@ const Game = (() => {
     const secColor = SECTION_COLORS[section] || SECTION_COLORS.chill;
     const bgPulse = clamp(Math.max(getBeatPulse(songTime), getLiveBassLevel() * 0.9), 0, 1);
 
+    updateDesaturationFilter();
     ctx.save();
-    if (session.desaturation > 0.001) ctx.filter = `grayscale(${Math.round(session.desaturation * 100)}%)`;
     let shakeX = 0, shakeY = 0;
     if (session.screenShakeMag > 0) {
       shakeX = (Math.random() * 2 - 1) * session.screenShakeMag;
