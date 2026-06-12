@@ -55,6 +55,7 @@ const Storage = (() => {
         listenEnabled: false,
         debugLog: false,
         tapSound: 'hihat', // hihat | clap | 808 | laser
+        rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false },

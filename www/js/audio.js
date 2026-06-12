@@ -599,6 +599,22 @@ const AudioEngine = (() => {
     osc.stop(time + 0.07);
   }
 
+  // ---------------- rhythm guide tick (quiet, on every grid beat) ----------------
+  function playGuideTick(audioCtx, time, gainValue) {
+    gainValue = gainValue != null ? gainValue : 0.1;
+    if (gainValue <= 0.0005) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1800, time);
+    gain.gain.setValueAtTime(gainValue, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + 0.05);
+  }
+
   // ---------------- tap sound picker (perfect-hit feedback) ----------------
   const TAP_SOUNDS = ['hihat', 'clap', '808', 'laser'];
 
@@ -731,7 +747,7 @@ const AudioEngine = (() => {
 
   return {
     getContext, decodeFile, hashAudioBuffer, mixToMono, analyze,
-    createReverbImpulse, playTick, playClick, createPlaybackChain,
+    createReverbImpulse, playTick, playClick, playGuideTick, createPlaybackChain,
     generateClickTrack,
     playBassThump,
     normalizeTunerSettings, defaultTunerSettings,

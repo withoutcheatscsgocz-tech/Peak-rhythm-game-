@@ -327,6 +327,7 @@ const Game = (() => {
       practicePassHits: 0, practiceCleanPasses: 0,
       pauseOnCheckpoint: !!opts.pauseOnCheckpoint,
       nextClickIndex: 0,
+      nextGuideIndex: 0,
       finished: false, gameOver: false, completing: false,
       bgEnergy: 0,
       hitHistory: carry.hitHistory || [],
@@ -571,8 +572,12 @@ const Game = (() => {
 
     processTrack(songTime, realNow);
 
-    if (session.modifiers.has('bpmOnly') && session.analysis) {
-      scheduleMetronomeClicks(realNow);
+    if (session.analysis) {
+      if (session.modifiers.has('bpmOnly')) {
+        scheduleMetronomeClicks(realNow);
+      } else {
+        scheduleRhythmGuideClicks(realNow);
+      }
     }
 
     if (session.ghostData) updateGhost(songTime);
@@ -742,6 +747,7 @@ const Game = (() => {
     session.hitStopUntilReal = 0;
     session.ringIndex = 0;
     session.nextClickIndex = 0;
+    session.nextGuideIndex = 0;
   }
 
   function updatePracticeLoop(songTime) {
@@ -769,6 +775,37 @@ const Game = (() => {
         AudioEngine.playClick(audioCtx, Math.max(beatRealTime, realNow), b.type === 'strong');
       }
       session.nextClickIndex++;
+    }
+  }
+
+  /** RHYTHM GUIDE: quiet tick on every grid beat, fading out as perfect rate rises. */
+  function rhythmGuideActive() {
+    if (session.micActive || session.practice) return false;
+    const setting = Storage.getSettings().rhythmGuide || 'auto';
+    if (setting === 'off') return false;
+    if (setting === 'on') return true;
+    return Storage.getStats().totalSongsPlayed < 3;
+  }
+
+  function guideGain() {
+    const recent = session.hitHistory.slice(-20);
+    if (!recent.length) return 0.12;
+    const perfectRate = recent.filter(h => h.grade === 'perfect').length / recent.length;
+    return Math.max(0, 0.12 * (1 - perfectRate));
+  }
+
+  function scheduleRhythmGuideClicks(realNow) {
+    if (!rhythmGuideActive()) return;
+    const beats = session.analysis.beats;
+    while (session.nextGuideIndex < beats.length) {
+      const b = beats[session.nextGuideIndex];
+      const beatRealTime = songTimeToRealTime(b.time);
+      if (beatRealTime - realNow > 0.1) break;
+      if (beatRealTime >= realNow - 0.1) {
+        const gain = guideGain();
+        if (gain > 0.001) AudioEngine.playGuideTick(audioCtx, Math.max(beatRealTime, realNow), gain);
+      }
+      session.nextGuideIndex++;
     }
   }
 

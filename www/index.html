@@ -120,6 +120,14 @@
         <button class="btn ghost small focusable" data-action="tap-sound-preview">PREVIEW</button>
       </div>
     </label>
+    <label class="setting-row">
+      <span>Rhythm Guide (quiet tick on every beat)</span>
+      <select id="rhythm-guide-select" class="select-input focusable">
+        <option value="auto">AUTO (first 3 plays)</option>
+        <option value="on">ON</option>
+        <option value="off">OFF</option>
+      </select>
+    </label>
   </div>
   <div class="panel">
     <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
@@ -157,6 +165,9 @@
     <div class="result-row"><span>LENGTH</span><b id="result-length">-</b></div>
     <div class="result-row"><span>BEATS</span><b id="result-beats">-</b></div>
     <div class="result-row"><span>INTENSITY</span><b id="result-intensity">-</b></div>
+  </div>
+  <div id="result-weak-warning" class="weak-beat-warning hidden">
+    Weak beat detected — this song may not play well. Try the BEAT TUNER to adjust detection.
   </div>
   <canvas id="song-map-canvas" class="song-map-canvas"></canvas>
   <div class="song-map-legend">

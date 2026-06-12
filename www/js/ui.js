@@ -177,6 +177,12 @@ const UI = (() => {
       Storage.setSetting('tapSound', tapSoundSelect.value);
     });
 
+    const rhythmGuideSelect = $('rhythm-guide-select');
+    rhythmGuideSelect.value = settings.rhythmGuide || 'auto';
+    rhythmGuideSelect.addEventListener('change', () => {
+      Storage.setSetting('rhythmGuide', rhythmGuideSelect.value);
+    });
+
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');
@@ -208,6 +214,9 @@ const UI = (() => {
     $('result-beats').textContent = analysis.beats.length;
     const intensityPct = Math.round(clamp01(analysis.intensity) * 100);
     $('result-intensity').textContent = `${intensityPct}%`;
+
+    const weakWarning = $('result-weak-warning');
+    weakWarning.classList.toggle('hidden', (analysis.confidence == null) || analysis.confidence >= 0.5);
   }
 
   // ---------------- song map preview (minimap of the generated level) ----------------

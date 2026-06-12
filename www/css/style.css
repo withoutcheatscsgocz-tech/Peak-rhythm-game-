@@ -200,6 +200,12 @@ h3 {
 .result-panel .result-row:last-child, .result-panel .stat-row:last-child { border-bottom: none; }
 .result-panel b { font-size: 15px; }
 
+.weak-beat-warning {
+  border: 1px solid #ffcc33; background: rgba(255,204,51,0.08);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+  font-size: 12px; line-height: 1.6; letter-spacing: 0.5px; color: #ffcc33;
+}
+
 /* ============================================================
    Settings rows
    ============================================================ */
