@@ -28,13 +28,13 @@ const Level = (() => {
   }
 
   /**
-   * Generates the track from a BPM-locked beat grid:
-   *  - bpm + phase (from the bass-band analysis) define a steady grid of
-   *    beat times spanning the whole song.
-   *  - every grid beat -> a spike/doubleSpike/gap obstacle, guaranteeing
-   *    spikes always land exactly on the beat.
-   *  - bassBeats are used only to pick how "strong" the kick is at each
-   *    grid beat (for obstacle-type weighting).
+   * Generates the track from the analyzed beat grid (PART A):
+   *  - `analysis.beatGrid` is the canonical, drift-aware grid produced by
+   *    the DP beat tracker - every grid beat -> a spike/doubleSpike/gap
+   *    obstacle, guaranteeing spikes always land exactly on the beat.
+   *  - `analysis.beats[i].bass` (aligned 1:1 with beatGrid) is the
+   *    normalized bass-band energy at that grid slot, used only to pick
+   *    how "strong" the kick is (for obstacle-type weighting).
    *
    * track[]: { time, type:'strong', obstacleType, energy, section, index }
    * checkpoints[]: times (sec), snapped to the nearest beat, every ~20s
@@ -42,12 +42,9 @@ const Level = (() => {
   function generate(analysis, songHash) {
     const rng = mulberry32(hashToSeed(songHash || 'oneDot'));
 
-    const bassBeats = analysis.bassBeats || [];
-    const medianBassEnergy = median(bassBeats.map(b => b.energy)) || 0.5;
-    const bpm = analysis.bpm || 120;
-    const beatInterval = 60 / bpm;
-    const phase = analysis.phase || 0;
-    const duration = analysis.duration || 0;
+    const beats = analysis.beats || [];
+    const grid = (analysis.beatGrid && analysis.beatGrid.length) ? analysis.beatGrid : beats.map(b => b.time);
+    const medianBassEnergy = median(beats.map(b => (b.bass != null ? b.bass : b.energy || 0))) || 0.5;
     const sections = analysis.sections || [];
     const sectionDuration = (sections[0] && sections[0].duration) || 2;
 
@@ -57,23 +54,10 @@ const Level = (() => {
       return sections[idx].type;
     };
 
-    // energy of the nearest detected bass onset, if one falls within
-    // half a beat of this grid point; otherwise treat it as a quiet beat.
-    const energyAt = (time) => {
-      let nearest = null, bestDist = Infinity;
-      for (const b of bassBeats) {
-        const d = Math.abs(b.time - time);
-        if (d < bestDist) { bestDist = d; nearest = b; }
-      }
-      return (nearest && bestDist <= beatInterval / 2) ? nearest.energy : medianBassEnergy * 0.5;
-    };
-
-    const grid = [];
-    for (let t = phase; t < duration; t += beatInterval) grid.push(t);
-
     const track = grid.map((time, i) => {
-      const energy = energyAt(time);
-      const section = sectionAt(time);
+      const beat = beats[i];
+      const energy = beat && beat.bass != null ? beat.bass : medianBassEnergy * 0.5;
+      const section = (beat && beat.section) || sectionAt(time);
       const r = rng();
       const strongKick = energy >= medianBassEnergy * 1.2;
       let obstacleType;

@@ -68,174 +68,392 @@ const AudioEngine = (() => {
     return out;
   }
 
-  /** Rolling-average (~1s) peak picking with a minimum spacing -> onset list. */
-  function detectOnsets(energy, max, windowsPerSec, sensitivity, minSpacingSec) {
-    const numWindows = energy.length;
-    const norm = new Float32Array(numWindows);
-    for (let w = 0; w < numWindows; w++) norm[w] = energy[w] / max;
+  // ---------------- small math helpers ----------------
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-    const avgWindow = Math.max(1, Math.round(windowsPerSec));
-    const rollingAvg = new Float32Array(numWindows);
+  function mean(arr) {
     let sum = 0;
-    for (let w = 0; w < numWindows; w++) {
-      sum += norm[w];
-      if (w >= avgWindow) sum -= norm[w - avgWindow];
-      rollingAvg[w] = sum / Math.min(w + 1, avgWindow);
-    }
+    for (let i = 0; i < arr.length; i++) sum += arr[i];
+    return arr.length ? sum / arr.length : 0;
+  }
 
-    const minSpacingWindows = Math.max(1, Math.round(minSpacingSec * windowsPerSec));
-    const onsets = [];
-    let lastOnsetWindow = -minSpacingWindows;
-    for (let w = 1; w < numWindows - 1; w++) {
-      if (norm[w] > rollingAvg[w] * sensitivity &&
-          norm[w] >= norm[w - 1] && norm[w] >= norm[w + 1] &&
-          (w - lastOnsetWindow) >= minSpacingWindows) {
-        onsets.push({ index: w, energy: norm[w] });
-        lastOnsetWindow = w;
+  function median(arr) {
+    if (!arr.length) return 0;
+    const sorted = Array.from(arr).sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  function hannWindow(size) {
+    const w = new Float64Array(size);
+    for (let i = 0; i < size; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
+    return w;
+  }
+
+  /** In-place iterative radix-2 Cooley-Tukey FFT (re/im same length, power of 2). */
+  function fftInPlace(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) {
+        let tmp = re[i]; re[i] = re[j]; re[j] = tmp;
+        tmp = im[i]; im[i] = im[j]; im[j] = tmp;
       }
     }
-    return onsets;
+    for (let len = 2; len <= n; len <<= 1) {
+      const half = len >> 1;
+      const ang = -2 * Math.PI / len;
+      const wRe = Math.cos(ang), wIm = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let curRe = 1, curIm = 0;
+        for (let j = 0; j < half; j++) {
+          const a = i + j, b = a + half;
+          const vRe = re[b] * curRe - im[b] * curIm;
+          const vIm = re[b] * curIm + im[b] * curRe;
+          const uRe = re[a], uIm = im[a];
+          re[a] = uRe + vRe; im[a] = uIm + vIm;
+          re[b] = uRe - vRe; im[b] = uIm - vIm;
+          const nextRe = curRe * wRe - curIm * wIm;
+          const nextIm = curRe * wIm + curIm * wRe;
+          curRe = nextRe; curIm = nextIm;
+        }
+      }
+    }
+  }
+
+  /** Yields a tick so progress updates can repaint during long analysis loops. */
+  function yieldToUI() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   /**
-   * Full offline analysis pipeline: bandpass-filters the mono mix down to the
-   * bass band (~40-150Hz, where kick/bass-drum hits live) and runs
-   * rolling-average onset detection on its windowed energy to find
-   * bassBeats. A 512-sample window (~11.6ms @ 44.1kHz) keeps onset times
-   * closely aligned to the audible hit. `bpm` and `phase` are derived from
-   * bassBeats so Level.generate can build a steady BPM-locked grid -> a
-   * spike obstacle on every beat of the whole song. A combined `beats`
-   * array is also returned for backward-compat (metronome ring, BPM ONLY
-   * clicks, tuner overview).
+   * Real beat-tracking analysis pipeline (PART A):
+   *  1. ONSET ENVELOPE: spectral flux (frame-to-frame magnitude-spectrum
+   *     increase, half-wave rectified, log-compressed) via FFT at a
+   *     ~11.6ms hop (1024-sample frames, 512 hop @ 44.1kHz).
+   *  2. TEMPO: autocorrelation of the envelope over 60-180 BPM with
+   *     octave-error correction (prefers 90-150 BPM on near-ties).
+   *  3. BEAT GRID: a dynamic-programming beat tracker (Ellis 2007) places a
+   *     regular grid that maximizes onset strength at beat positions,
+   *     re-estimating the local tempo in ~10s windows to follow slow drift.
+   *  4. Every grid beat carries normalized bass/vocal/high band energies so
+   *     Level.generate can decide WHAT goes on each slot - timing always
+   *     comes from the grid (`beatGrid`/`beats[].time`), never raw onsets.
+   * `confidence`/`gridStability` feed the A5 QA check (weak-beat warning).
    */
   async function analyze(audioBuffer, tunerSettings, onProgress) {
     const t = normalizeTunerSettings(tunerSettings);
-
     const sampleRate = audioBuffer.sampleRate;
     const length = audioBuffer.length;
-    const left = audioBuffer.getChannelData(0);
-    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : left;
+    const duration = audioBuffer.duration;
+    const mid = mixToMono(audioBuffer);
+    if (onProgress) onProgress(0.02);
 
-    // mono mixdown
-    const mid = new Float32Array(length);
-    for (let i = 0; i < length; i++) mid[i] = (left[i] + right[i]) * 0.5;
-    if (onProgress) onProgress(0.1);
+    // ---- onset envelope + per-frame band energies (FFT spectral flux) ----
+    const FFT_SIZE = 1024;
+    const HOP = 512;
+    const hopTime = HOP / sampleRate;
+    const numFrames = Math.max(1, Math.floor(Math.max(0, length - FFT_SIZE) / HOP) + 1);
+    const numBins = FFT_SIZE / 2 + 1;
 
-    const offlineCtx = new OfflineAudioContext(1, length, sampleRate);
-    const midBuf = offlineCtx.createBuffer(1, length, sampleRate);
-    midBuf.copyToChannel(mid, 0);
-    const midSrc = offlineCtx.createBufferSource();
-    midSrc.buffer = midBuf;
+    const win = hannWindow(FFT_SIZE);
+    const re = new Float64Array(FFT_SIZE);
+    const im = new Float64Array(FFT_SIZE);
+    const prevMag = new Float64Array(numBins);
+    const flux = new Float64Array(numFrames);
+    const bassEnergy = new Float64Array(numFrames);
+    const vocalEnergy = new Float64Array(numFrames);
+    const highEnergy = new Float64Array(numFrames);
+    const totalEnergy = new Float64Array(numFrames);
 
-    const bassFilter = offlineCtx.createBiquadFilter();
-    bassFilter.type = 'bandpass';
-    bassFilter.frequency.value = 85; // center of ~40-150Hz
-    bassFilter.Q.value = 1.0;
-    midSrc.connect(bassFilter);
-    bassFilter.connect(offlineCtx.destination);
+    const binHz = sampleRate / FFT_SIZE;
+    const bassLoBin = Math.max(1, Math.round(40 / binHz));
+    const bassHiBin = Math.max(bassLoBin, Math.round(150 / binHz));
+    const vocalLoBin = Math.max(bassHiBin + 1, Math.round(300 / binHz));
+    const vocalHiBin = Math.max(vocalLoBin, Math.round(3000 / binHz));
+    const highLoBin = Math.max(vocalHiBin + 1, Math.round(3000 / binHz));
+    const highHiBin = Math.min(numBins - 1, Math.round(10000 / binHz));
 
-    midSrc.start();
-    const rendered = await offlineCtx.startRendering();
-    if (onProgress) onProgress(0.45);
-
-    const bassData = rendered.getChannelData(0);
-
-    // windowed bass energy
-    const windowSize = 512;
-    const numWindows = Math.floor(length / windowSize);
-    const bassEnergy = new Float32Array(numWindows);
-    let maxBass = 1e-9;
-
-    for (let w = 0; w < numWindows; w++) {
-      const start = w * windowSize;
-      let sumBass = 0;
-      for (let i = 0; i < windowSize; i++) {
-        const b = bassData[start + i];
-        sumBass += b * b;
+    for (let f = 0; f < numFrames; f++) {
+      const start = f * HOP;
+      for (let i = 0; i < FFT_SIZE; i++) {
+        const sample = start + i < length ? mid[start + i] : 0;
+        re[i] = sample * win[i];
+        im[i] = 0;
       }
-      const eBass = sumBass / windowSize;
-      bassEnergy[w] = eBass;
-      if (eBass > maxBass) maxBass = eBass;
+      fftInPlace(re, im);
+
+      let fluxSum = 0, bassSum = 0, vocalSum = 0, highSum = 0, total = 0;
+      for (let k = 0; k < numBins; k++) {
+        const mag = Math.hypot(re[k], im[k]);
+        const diff = mag - prevMag[k];
+        if (diff > 0) fluxSum += diff;
+        const power = mag * mag;
+        total += power;
+        if (k >= bassLoBin && k <= bassHiBin) bassSum += power;
+        if (k >= vocalLoBin && k <= vocalHiBin) vocalSum += power;
+        if (k >= highLoBin && k <= highHiBin) highSum += power;
+        prevMag[k] = mag;
+      }
+      flux[f] = Math.log1p(fluxSum);
+      bassEnergy[f] = bassSum;
+      vocalEnergy[f] = vocalSum;
+      highEnergy[f] = highSum;
+      totalEnergy[f] = total;
+
+      if (onProgress && (f & 1023) === 0) {
+        onProgress(0.05 + 0.55 * (f / numFrames));
+        await yieldToUI();
+      }
     }
+    if (onProgress) onProgress(0.6);
+
+    // beat tuner "sensitivity": scales the onset-envelope data term relative
+    // to the DP's fixed spacing penalty below - higher follows raw onsets
+    // more closely, lower sticks closer to a strict regular grid.
+    const sensitivity = t.bass.sensitivity || 1;
+    for (let f = 0; f < numFrames; f++) flux[f] *= sensitivity;
+
+    // ---- tempo estimation: autocorrelation + octave-error correction ----
+    const fluxMean = mean(flux);
+    const centered = new Float64Array(numFrames);
+    for (let f = 0; f < numFrames; f++) centered[f] = flux[f] - fluxMean;
+
+    function autocorr(lag) {
+      let sum = 0;
+      const n = numFrames - lag;
+      for (let i = 0; i < n; i++) sum += centered[i] * centered[i + lag];
+      return n > 0 ? sum / n : 0;
+    }
+
+    const MIN_BPM = 60, MAX_BPM = 180;
+    // beat tuner "min spacing": narrows the upper end of the tempo search
+    const tunerMaxBpm = Math.max(MIN_BPM, Math.min(220, 60 / Math.max(0.05, t.bass.minSpacing || 0.25)));
+    const bpmHigh = Math.min(MAX_BPM, tunerMaxBpm);
+    let lagMin = Math.max(1, Math.floor((60 / bpmHigh) / hopTime));
+    let lagMax = Math.min(numFrames - 1, Math.ceil((60 / MIN_BPM) / hopTime));
+    if (lagMax < lagMin) lagMax = lagMin;
+
+    const acf0 = autocorr(0) || 1e-9;
+    let bpm = 120, confidence = 0, globalPeriodFrames = (60 / 120) / hopTime;
+
+    if (numFrames > lagMax + 1 && lagMax >= 1) {
+      let bestLag = lagMin, bestVal = -Infinity;
+      for (let lag = lagMin; lag <= lagMax; lag++) {
+        const v = autocorr(lag);
+        if (v > bestVal) { bestVal = v; bestLag = lag; }
+      }
+      const bpmRaw = 60 / (bestLag * hopTime);
+
+      const valAtBpm = (b) => {
+        const lag = Math.round(60 / (b * hopTime));
+        if (lag < 1 || lag >= numFrames) return -Infinity;
+        return autocorr(lag);
+      };
+
+      const candidates = [{ bpm: bpmRaw, val: bestVal }];
+      if (bpmRaw * 2 <= 220) candidates.push({ bpm: bpmRaw * 2, val: valAtBpm(bpmRaw * 2) });
+      if (bpmRaw / 2 >= 40) candidates.push({ bpm: bpmRaw / 2, val: valAtBpm(bpmRaw / 2) });
+
+      let chosen = candidates[0];
+      for (const c of candidates) if (c.val > chosen.val) chosen = c;
+      for (const c of candidates) {
+        if (c.bpm >= 90 && c.bpm <= 150 && c.val >= chosen.val * 0.85 && c !== chosen) { chosen = c; break; }
+      }
+
+      bpm = chosen.bpm;
+      while (bpm < MIN_BPM) bpm *= 2;
+      while (bpm > MAX_BPM) bpm /= 2;
+      globalPeriodFrames = (60 / bpm) / hopTime;
+      confidence = clamp01(chosen.val / acf0);
+    }
+    if (onProgress) onProgress(0.65);
+
+    // ---- local tempo curve for slow drift (~10s windows / 5s stride) ----
+    const windowFrames = Math.max(8, Math.round(10 / hopTime));
+    const strideFrames = Math.max(4, Math.round(5 / hopTime));
+    const driftLagLo = Math.max(lagMin, Math.floor(globalPeriodFrames * 0.85));
+    const driftLagHi = Math.min(lagMax, Math.ceil(globalPeriodFrames * 1.15));
+    const localCurve = [];
+    for (let start = 0; start < numFrames; start += strideFrames) {
+      const end = Math.min(numFrames, start + windowFrames);
+      if (end - start < windowFrames * 0.5) break;
+      let bestLag = Math.round(globalPeriodFrames), bestVal = -Infinity;
+      for (let lag = driftLagLo; lag <= driftLagHi && lag < (end - start); lag++) {
+        let sum = 0;
+        const n = (end - start) - lag;
+        for (let i = 0; i < n; i++) sum += centered[start + i] * centered[start + i + lag];
+        const v = n > 0 ? sum / n : 0;
+        if (v > bestVal) { bestVal = v; bestLag = lag; }
+      }
+      localCurve.push({ frame: start + (end - start) / 2, period: bestLag });
+    }
+    if (!localCurve.length) localCurve.push({ frame: numFrames / 2, period: globalPeriodFrames });
+
+    const periodAtFrame = (frame) => {
+      if (frame <= localCurve[0].frame) return localCurve[0].period;
+      for (let i = 1; i < localCurve.length; i++) {
+        if (frame <= localCurve[i].frame) {
+          const a = localCurve[i - 1], b = localCurve[i];
+          const span = b.frame - a.frame;
+          const ratio = span > 0 ? (frame - a.frame) / span : 0;
+          return a.period + (b.period - a.period) * ratio;
+        }
+      }
+      return localCurve[localCurve.length - 1].period;
+    };
     if (onProgress) onProgress(0.7);
 
-    const windowsPerSec = sampleRate / windowSize;
-    const bassOnsets = detectOnsets(bassEnergy, maxBass, windowsPerSec, t.bass.sensitivity, t.bass.minSpacing);
-    if (onProgress) onProgress(0.85);
+    // ---- DP beat tracking (Ellis 2007): regular grid, max onset strength ----
+    const cumscore = new Float64Array(numFrames);
+    const backlink = new Int32Array(numFrames).fill(-1);
+    const ALPHA = 6; // spacing-penalty tightness
 
-    const bassBeats = bassOnsets.map(o => ({
-      time: (o.index * windowSize) / sampleRate, energy: o.energy, band: 'bass',
-    }));
+    for (let i = 0; i < numFrames; i++) {
+      const tau = Math.max(1, periodAtFrame(i));
+      // keep spacing within the local drift tolerance (no octave jumps to
+      // half/double-time subdivisions - those are decided by Level.generate)
+      const searchLo = Math.max(0, Math.floor(i - tau * 1.15));
+      const searchHi = Math.min(i - 1, Math.floor(i - tau * 0.85));
+      let best = -Infinity, bestJ = -1;
+      for (let j = searchLo; j <= searchHi; j++) {
+        const delta = i - j;
+        const penalty = -ALPHA * Math.pow(Math.log(delta / tau), 2);
+        const score = cumscore[j] + penalty;
+        if (score > best) { best = score; bestJ = j; }
+      }
+      cumscore[i] = flux[i] + Math.max(0, best);
+      backlink[i] = best > 0 ? bestJ : -1;
 
-    // BPM = median interval of bass onsets (the rhythmic backbone)
-    let bpm = 120;
-    if (bassBeats.length > 1) {
-      const intervals = [];
-      for (let i = 1; i < bassBeats.length; i++) intervals.push(bassBeats[i].time - bassBeats[i - 1].time);
-      intervals.sort((a, b) => a - b);
-      const median = intervals[Math.floor(intervals.length / 2)];
-      if (median > 0) {
-        bpm = 60 / median;
-        while (bpm < 70) bpm *= 2;
-        while (bpm > 180) bpm /= 2;
+      if (onProgress && (i & 2047) === 0) {
+        onProgress(0.7 + 0.15 * (i / numFrames));
+        await yieldToUI();
       }
     }
+    if (onProgress) onProgress(0.85);
 
-    // phase: circular mean of each bass onset's offset within a beat
-    // interval, so the BPM grid (used to place a spike on every beat)
-    // lines up with where the kicks actually land.
-    let phase = 0;
-    if (bassBeats.length > 0) {
-      const beatInterval = 60 / bpm;
-      let sumSin = 0, sumCos = 0;
-      bassBeats.forEach(b => {
-        const angle = (2 * Math.PI * b.time) / beatInterval;
-        sumSin += Math.sin(angle);
-        sumCos += Math.cos(angle);
-      });
-      const meanAngle = Math.atan2(sumSin, sumCos);
-      phase = ((meanAngle / (2 * Math.PI)) * beatInterval + beatInterval) % beatInterval;
+    // pick the best-scoring frame within the last beat period, then backtrack
+    const lastPeriod = Math.max(1, Math.round(periodAtFrame(numFrames - 1)));
+    let endIdx = numFrames - 1, endVal = -Infinity;
+    for (let i = Math.max(0, numFrames - lastPeriod); i < numFrames; i++) {
+      if (cumscore[i] > endVal) { endVal = cumscore[i]; endIdx = i; }
+    }
+    const beatFramesRev = [];
+    for (let cur = endIdx; cur >= 0; cur = backlink[cur]) beatFramesRev.push(cur);
+    let beatTimes = beatFramesRev.reverse().map(f => f * hopTime);
+    if (!beatTimes.length) beatTimes = [0];
+
+    // ---- quantize: fill skipped beats and extend to cover the whole song,
+    // so every gameplay element snaps to the grid ----
+    const filled = [beatTimes[0]];
+    for (let i = 1; i < beatTimes.length; i++) {
+      const a = filled[filled.length - 1];
+      const b = beatTimes[i];
+      const tau = periodAtFrame(Math.round(((a + b) / 2) / hopTime)) * hopTime;
+      const steps = tau > 0 ? Math.max(1, Math.round((b - a) / tau)) : 1;
+      for (let s = 1; s < steps; s++) filled.push(a + (b - a) * (s / steps));
+      filled.push(b);
+    }
+    beatTimes = filled;
+
+    while (beatTimes[0] > 1e-6) {
+      const tau = periodAtFrame(Math.max(0, Math.round(beatTimes[0] / hopTime))) * hopTime;
+      const next = beatTimes[0] - tau;
+      beatTimes.unshift(Math.max(0, next));
+      if (next <= 0) break;
     }
 
-    // section detection via rolling RMS over 2s windows of the mono mix
+    while (beatTimes[beatTimes.length - 1] < duration) {
+      const lastT = beatTimes[beatTimes.length - 1];
+      const tau = periodAtFrame(Math.min(numFrames - 1, Math.round(lastT / hopTime))) * hopTime;
+      if (tau <= 0) break;
+      const next = lastT + tau;
+      if (next > duration + tau * 0.5) break;
+      beatTimes.push(next);
+    }
+
+    beatTimes = beatTimes.filter((v, i, arr) => i === 0 || v > arr[i - 1] + 1e-6);
+    if (onProgress) onProgress(0.9);
+
+    // ---- section detection (intro/chill/build/drop) from total energy ----
     const sectionWindowSec = 2;
-    const sectionWindowSize = Math.round(sectionWindowSec * sampleRate);
-    const numSections = Math.max(1, Math.ceil(length / sectionWindowSize));
-    const sectionRMS = new Float32Array(numSections);
+    const framesPerSection = Math.max(1, Math.round(sectionWindowSec / hopTime));
+    const numSections = Math.max(1, Math.ceil(numFrames / framesPerSection));
+    const sectionEnergy = new Float64Array(numSections);
     for (let s = 0; s < numSections; s++) {
-      let sumSq = 0, count = 0;
-      const start = s * sectionWindowSize;
-      const end = Math.min(length, start + sectionWindowSize);
-      for (let i = start; i < end; i += 4) { sumSq += mid[i] * mid[i]; count++; }
-      sectionRMS[s] = count ? Math.sqrt(sumSq / count) : 0;
+      const start = s * framesPerSection;
+      const end = Math.min(numFrames, start + framesPerSection);
+      let sum = 0, count = 0;
+      for (let f = start; f < end; f++) { sum += totalEnergy[f]; count++; }
+      sectionEnergy[s] = count ? sum / count : 0;
     }
-    const maxRMS = Math.max(...sectionRMS) || 1e-9;
+    let maxSectionEnergy = 1e-9;
+    for (let s = 0; s < numSections; s++) if (sectionEnergy[s] > maxSectionEnergy) maxSectionEnergy = sectionEnergy[s];
     const sections = [];
     for (let i = 0; i < numSections; i++) {
-      const norm = sectionRMS[i] / maxRMS;
+      const norm = sectionEnergy[i] / maxSectionEnergy;
       let type;
       if (norm < 0.35) type = (i < numSections * 0.12) ? 'intro' : 'chill';
       else if (norm < 0.65) type = 'build';
       else type = 'drop';
       sections.push({ time: i * sectionWindowSec, duration: sectionWindowSec, type, intensity: norm });
     }
-
     const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.floor(time / sectionWindowSec))].type;
-    bassBeats.forEach(b => { b.section = sectionAt(b.time); });
 
-    // combined beats for backward-compat (metronome ring, BPM ONLY clicks, tuner overview)
-    const beats = bassBeats.map(b => ({ time: b.time, energy: b.energy, type: 'strong', section: b.section, band: 'bass' }));
+    // ---- per-grid-beat band energies: decide WHAT goes on each slot ----
+    const bassVals = [], vocalVals = [], highVals = [];
+    beatTimes.forEach((time) => {
+      const fIdx = Math.min(numFrames - 1, Math.max(0, Math.round(time / hopTime)));
+      bassVals.push(bassEnergy[fIdx]);
+      vocalVals.push(vocalEnergy[fIdx]);
+      highVals.push(highEnergy[fIdx]);
+    });
+    const maxBass = Math.max(...bassVals, 1e-9);
+    const maxVocal = Math.max(...vocalVals, 1e-9);
+    const maxHigh = Math.max(...highVals, 1e-9);
+    const medianBass = median(bassVals) || 1e-9;
+
+    const beats = beatTimes.map((time, i) => {
+      const bass = bassVals[i] / maxBass;
+      return {
+        time,
+        energy: bass,
+        bass,
+        vocal: vocalVals[i] / maxVocal,
+        high: highVals[i] / maxHigh,
+        type: bassVals[i] >= medianBass * 1.15 ? 'strong' : 'weak',
+        section: sectionAt(time),
+      };
+    });
+    const bassBeats = beats.map(b => ({ time: b.time, energy: b.bass, section: b.section }));
+    const beatGrid = beats.map(b => b.time);
+
+    const beatInterval = 60 / bpm;
+    const phase = beatGrid.length ? ((beatGrid[0] % beatInterval) + beatInterval) % beatInterval : 0;
+
+    // ---- A5 QA: grid stability from interval regularity ----
+    let gridStability = 1;
+    if (beatGrid.length > 2) {
+      const intervals = [];
+      for (let i = 1; i < beatGrid.length; i++) intervals.push(beatGrid[i] - beatGrid[i - 1]);
+      const meanInterval = mean(intervals);
+      const variance = mean(intervals.map(v => (v - meanInterval) * (v - meanInterval)));
+      gridStability = meanInterval > 0 ? clamp01(1 - Math.sqrt(variance) / meanInterval) : 0;
+    }
 
     const intensity = sections.reduce((a, s) => a + s.intensity, 0) / sections.length;
-
     if (onProgress) onProgress(1);
 
     return {
       bpm: Math.round(bpm),
       phase,
-      duration: audioBuffer.duration,
+      duration,
       beats,
       bassBeats,
+      beatGrid,
+      confidence,
+      gridStability,
       sections,
       intensity,
       sampleRate,
@@ -288,18 +506,21 @@ const AudioEngine = (() => {
     const buffer = await offlineCtx.startRendering();
 
     const beats = [];
-    const bassBeats = [];
     for (let i = 0; i < totalBeats; i++) {
       const strong = i % 4 === 0;
       const time = i * beatInterval;
       beats.push({
         time,
         energy: strong ? 1 : 0.5,
+        bass: strong ? 1 : 0.5,
+        vocal: 0,
+        high: 0,
         type: strong ? 'strong' : 'weak',
         section: 'chill',
       });
-      bassBeats.push({ time, energy: strong ? 1 : 0.6, section: 'chill' });
     }
+    const bassBeats = beats.map(b => ({ time: b.time, energy: b.bass, section: b.section }));
+    const beatGrid = beats.map(b => b.time);
 
     const analysis = {
       bpm,
@@ -307,6 +528,9 @@ const AudioEngine = (() => {
       duration,
       beats,
       bassBeats,
+      beatGrid,
+      confidence: 1,
+      gridStability: 1,
       sections: [{ time: 0, duration, type: 'chill', intensity: 0.5 }],
       intensity: 0.5,
       sampleRate,
