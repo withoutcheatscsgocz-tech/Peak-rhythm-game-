@@ -60,6 +60,7 @@ const App = (() => {
     bindErrorHandlers();
     Game.init($('game-canvas'), $('fx-canvas'));
     UI.init();
+    UI.setHeartbeatRate('menu-heartbeat-dot', IDLE_HEARTBEAT_INTERVAL);
     bindGameCallbacks();
     bindGlobalActions();
     bindFileInputs();
@@ -131,6 +132,10 @@ const App = (() => {
         UI.populateStats();
         UI.showScreen('screen-stats');
         break;
+      case 'library':
+        UI.populateLibrary();
+        UI.showScreen('screen-library');
+        break;
       case 'themes':
         UI.populateThemesSkins();
         UI.showScreen('screen-themes');
@@ -149,6 +154,9 @@ const App = (() => {
         break;
       case 'debug-log-close':
         UI.hideDebugOverlay();
+        break;
+      case 'tap-sound-preview':
+        tapSoundPreview();
         break;
 
       // ---------------- navigation ----------------
@@ -208,6 +216,7 @@ const App = (() => {
       // ---------------- gameplay ----------------
       case 'pause':
         Game.pause();
+        UI.setHeartbeatRate('pause-heartbeat-dot', Game.session ? Game.session.beatInterval : 1);
         UI.showScreen('screen-pause', false);
         break;
       case 'resume':
@@ -312,11 +321,21 @@ const App = (() => {
     try {
       const audioBuffer = await AudioEngine.decodeFile(file);
       const hash = AudioEngine.hashAudioBuffer(audioBuffer);
-      const tunerSettings = Storage.getTunerSettings(hash);
-      const analysis = await AudioEngine.analyze(audioBuffer, tunerSettings, (p) => {
-        $('analyze-pct').textContent = `${Math.round(p * 100)}%`;
-      });
-      const levelData = Level.generate(analysis, hash);
+      const cached = Storage.getCachedSong(hash);
+      let analysis, levelData;
+      if (cached) {
+        $('analyzing-title').textContent = 'LOADED FROM LIBRARY';
+        $('analyze-pct').textContent = '100%';
+        analysis = cached.analysis;
+        levelData = Level.generate(analysis, hash);
+      } else {
+        const tunerSettings = Storage.getTunerSettings(hash);
+        analysis = await AudioEngine.analyze(audioBuffer, tunerSettings, (p) => {
+          $('analyze-pct').textContent = `${Math.round(p * 100)}%`;
+        });
+        levelData = Level.generate(analysis, hash);
+        Storage.cacheSongAnalysis(hash, file.name, analysis, levelData);
+      }
       current.audioBuffer = audioBuffer;
       current.analysis = analysis;
       current.levelData = levelData;
@@ -336,6 +355,7 @@ const App = (() => {
       UI.populateResult(file.name, analysis);
       UI.resetNav();
       UI.showScreen('screen-result', false);
+      UI.populateSongMap(levelData);
     } catch (e) {
       console.error(e);
       UI.showToast('Could not analyze this file.');
@@ -413,6 +433,12 @@ const App = (() => {
   }
 
   /** Plays a short 4-tick pattern of one band's synthesized sound (no song audio). */
+  function tapSoundPreview() {
+    const audioCtx = AudioEngine.getContext();
+    const soundId = Storage.getSettings().tapSound;
+    AudioEngine.playTapSound(audioCtx, audioCtx.currentTime + 0.05, soundId);
+  }
+
   function tunerTestSound(band) {
     const audioCtx = AudioEngine.getContext();
     const fn = band === 'bass' ? AudioEngine.playBassThump
@@ -435,9 +461,11 @@ const App = (() => {
     });
     current.analysis = analysis;
     current.levelData = Level.generate(analysis, current.songHash);
+    Storage.cacheSongAnalysis(current.songHash, current.songName, analysis, current.levelData);
     UI.populateResult(current.songName, analysis);
     UI.resetNav();
     UI.showScreen('screen-result', false);
+    UI.populateSongMap(current.levelData);
   }
 
   // ---------------- modifiers -> countdown -> gameplay ----------------
@@ -1068,6 +1096,8 @@ const App = (() => {
 
   // ---------------- audio reactive listen mode ----------------
   let listenBeatFlash = 0;
+  let listenHeartbeatInterval = 1;
+  const IDLE_HEARTBEAT_INTERVAL = 1; // 60 BPM resting pulse when LISTEN mode is off
 
   function listenLoop() {
     if (!listenActive) return;
@@ -1089,6 +1119,12 @@ const App = (() => {
     logo.style.transform = `scale(${1 + glow * 0.12})`;
     logo.style.opacity = String(0.85 + glow * 0.15);
 
+    const beatInterval = MicEngine.getBeatInterval();
+    if (Math.abs(beatInterval - listenHeartbeatInterval) > 0.02) {
+      listenHeartbeatInterval = beatInterval;
+      UI.setHeartbeatRate('menu-heartbeat-dot', beatInterval);
+    }
+
     listenRaf = requestAnimationFrame(listenLoop);
   }
 
@@ -1097,6 +1133,7 @@ const App = (() => {
     await MicEngine.start();
     listenActive = true;
     listenBeatFlash = 0;
+    listenHeartbeatInterval = 1;
     $('logo').style.animation = 'none';
     MicEngine.onBeat = (beat) => {
       listenBeatFlash = beat.type === 'strong' ? 1 : 0.6;
@@ -1111,6 +1148,7 @@ const App = (() => {
     listenRaf = null;
     MicEngine.onBeat = null;
     MicEngine.stop();
+    UI.setHeartbeatRate('menu-heartbeat-dot', IDLE_HEARTBEAT_INTERVAL);
     const ring = $('spectrum-ring');
     ring.style.borderColor = '';
     ring.style.opacity = '';

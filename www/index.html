@@ -29,6 +29,7 @@
   <div class="logo-wrap">
     <div class="logo" id="logo">ONE DOT</div>
     <div class="subtitle">a rhythm game for your ears</div>
+    <div class="heartbeat-dot" id="menu-heartbeat-dot"></div>
   </div>
   <div class="menu-buttons" id="start-menu">
     <button class="btn focusable" data-action="upload-song">UPLOAD SONG</button>
@@ -44,6 +45,9 @@
     <div class="menu-row">
       <button class="btn small focusable" data-action="stats">STATS</button>
       <button class="btn small focusable" data-action="themes">THEMES &amp; SKINS</button>
+    </div>
+    <div class="menu-row">
+      <button class="btn small focusable" data-action="library">SONG LIBRARY</button>
     </div>
     <div class="menu-row">
       <button class="btn small focusable" data-action="settings">SETTINGS</button>
@@ -104,6 +108,25 @@
         <option value="on">ON</option>
       </select>
     </label>
+    <label class="setting-row">
+      <span>Tap Sound (perfect hits)</span>
+      <div class="setting-row-inline">
+        <select id="tap-sound-select" class="select-input focusable">
+          <option value="hihat">HI-HAT</option>
+          <option value="clap">CLAP</option>
+          <option value="808">808</option>
+          <option value="laser">LASER</option>
+        </select>
+        <button class="btn ghost small focusable" data-action="tap-sound-preview">PREVIEW</button>
+      </div>
+    </label>
+    <label class="setting-row">
+      <span>Progress Bar Map Overlay (orb chains)</span>
+      <select id="songmap-overlay-select" class="select-input focusable">
+        <option value="off">OFF</option>
+        <option value="on">ON</option>
+      </select>
+    </label>
   </div>
   <div class="panel">
     <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
@@ -141,6 +164,14 @@
     <div class="result-row"><span>LENGTH</span><b id="result-length">-</b></div>
     <div class="result-row"><span>BEATS</span><b id="result-beats">-</b></div>
     <div class="result-row"><span>INTENSITY</span><b id="result-intensity">-</b></div>
+  </div>
+  <canvas id="song-map-canvas" class="song-map-canvas"></canvas>
+  <div class="song-map-legend">
+    <span><i class="legend-swatch" style="background:#ff5a3c"></i>DROP</span>
+    <span><i class="legend-swatch" style="background:#3cffb0"></i>BUILD</span>
+    <span><i class="legend-swatch" style="background:#6a8dff"></i>CHILL</span>
+    <span><i class="legend-swatch" style="background:#ffd24d"></i>ORB CHAIN</span>
+    <span><i class="legend-swatch legend-cp"></i>CHECKPOINT</span>
   </div>
   <div class="menu-row">
     <button class="btn focusable" data-action="beat-tuner">BEAT TUNER</button>
@@ -260,6 +291,7 @@
     <div class="time-remaining" id="time-remaining">0:00 left</div>
     <div class="song-progress-bar">
       <div class="song-progress-sections" id="song-progress-sections"></div>
+      <div class="song-progress-orbchains hidden" id="song-progress-orbchains"></div>
       <div class="song-progress-fill" id="song-progress-fill"></div>
       <div class="song-progress-checkpoints" id="song-progress-checkpoints"></div>
       <div class="song-progress-ghost hidden" id="song-progress-ghost"></div>
@@ -274,6 +306,7 @@
 <!-- ====================== PAUSE MENU ====================== -->
 <div id="screen-pause" class="screen">
   <h2>PAUSED</h2>
+  <div class="heartbeat-dot" id="pause-heartbeat-dot"></div>
   <div class="panel">
     <label class="setting-row">
       <span>Audio Latency Offset: <b id="pause-latency-value">0ms</b></span>
@@ -307,6 +340,7 @@
   <div class="panel result-panel" id="complete-stats">
     <!-- generated -->
   </div>
+  <canvas id="accuracy-graph" class="accuracy-graph hidden"></canvas>
   <div class="leaderboard-placement hidden" id="placement-banner"></div>
   <div class="menu-row">
     <button class="btn focusable" data-action="share-card">SHARE SCORE CARD</button>
@@ -367,6 +401,14 @@
   <h2>LEADERBOARDS</h2>
   <div id="leaderboard-song-list" class="grid-list scroll-panel"></div>
   <div id="leaderboard-detail" class="panel scroll-panel hidden"></div>
+  <button class="btn ghost focusable" data-action="back">BACK</button>
+</div>
+
+<!-- ====================== SONG LIBRARY ====================== -->
+<div id="screen-library" class="screen">
+  <h2>SONG LIBRARY</h2>
+  <p class="library-hint">Cached analysis for songs you've played. Re-upload the same file and analysis will be skipped instantly.</p>
+  <div id="library-song-list" class="grid-list library-list scroll-panel"></div>
   <button class="btn ghost focusable" data-action="back">BACK</button>
 </div>
 

@@ -121,6 +121,25 @@ h3 {
   margin-top: 8px;
 }
 
+/* ============================================================
+   Heartbeat idle dot - pulses at BPM-scaled rate when paused
+   or during LISTEN mode (PAUSED screen + start menu)
+   ============================================================ */
+.heartbeat-dot {
+  width: 16px; height: 16px;
+  margin: 4px auto 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent), 0 0 22px var(--accent);
+  --beat-duration: 1s;
+  animation: heartbeatPulse var(--beat-duration) ease-in-out infinite;
+}
+@keyframes heartbeatPulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.6; }
+  35% { transform: scale(1.25); opacity: 1; }
+  60% { transform: scale(0.95); opacity: 0.8; }
+}
+
 .menu-buttons {
   display: flex; flex-direction: column; gap: 10px;
   width: 100%; max-width: 360px;
@@ -186,6 +205,9 @@ h3 {
    ============================================================ */
 .setting-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; font-size: 12px; letter-spacing: 1px; }
 .setting-row:last-child { margin-bottom: 0; }
+.setting-row-inline { display: flex; gap: 8px; align-items: center; }
+.setting-row-inline .select-input { flex: 1; }
+.setting-row-inline .btn { padding: 8px 14px; margin: 0; }
 input[type="range"] {
   width: 100%; accent-color: var(--accent);
   height: 4px;
@@ -322,6 +344,11 @@ input[type="range"] {
 .song-progress-checkpoints .cp {
   position: absolute; top: -2px; width: 4px; height: 10px; border-radius: 2px;
   background: rgba(255,255,255,0.6);
+}
+.song-progress-orbchains { position: absolute; inset: 0; }
+.song-progress-orbchains .chain {
+  position: absolute; top: 0; height: 100%; min-width: 2px;
+  background: #ffd24d; opacity: 0.5; border-radius: 2px;
 }
 .song-progress-ghost {
   position: absolute; top: -4px; width: 2px; height: 14px; background: #ffd24d;
@@ -466,6 +493,14 @@ input[type="range"] {
 .achievements-grid .ach-body { flex: 1; }
 .achievements-grid .ach-icon { font-size: 22px; width: 36px; text-align: center; flex-shrink: 0; }
 
+.library-hint {
+  font-size: 11px; color: var(--accent-dim); line-height: 1.5;
+  width: 100%; max-width: 420px; margin-bottom: 10px;
+}
+.library-list { grid-template-columns: 1fr; }
+.library-list .grid-item { text-align: left; cursor: default; }
+.library-list .item-hint { letter-spacing: 0.5px; }
+
 /* ============================================================
    Leaderboards
    ============================================================ */
@@ -487,6 +522,29 @@ input[type="range"] {
   background: rgba(255,255,255,0.02); border: 1px solid var(--accent-dim); border-radius: 6px;
   margin-bottom: 12px;
 }
+
+.accuracy-graph {
+  width: 100%; max-width: 420px; height: 110px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--accent-dim); border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.song-map-canvas {
+  width: 100%; max-width: 420px; height: 80px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--accent-dim); border-radius: 6px;
+  margin-bottom: 6px;
+}
+.song-map-legend {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  width: 100%; max-width: 420px;
+  font-size: 9px; letter-spacing: 1px; color: var(--accent-dim);
+  margin-bottom: 12px;
+}
+.song-map-legend span { display: flex; align-items: center; gap: 4px; }
+.legend-swatch {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+}
+.legend-cp { background: rgba(255,255,255,0.7); width: 2px; height: 10px; border-radius: 0; }
 
 /* ============================================================
    Podium / confetti

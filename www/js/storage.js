@@ -54,6 +54,8 @@ const Storage = (() => {
         skin: 'classic',
         listenEnabled: false,
         debugLog: false,
+        tapSound: 'hihat', // hihat | clap | 808 | laser
+        songMapOverlay: false, // show orb-chain markers on the in-game progress bar
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false },
@@ -72,8 +74,11 @@ const Storage = (() => {
       leaderboards: {}, // hash -> [ {score, perfectRate, maxCombo, modifiers, date, fileName} ]
       endlessLeaderboard: [], // [ {score, songsSurvived, totalTime, date} ]
       tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing}, vocal:{...}, high:{...} }
+      songLibrary: {}, // hash -> { name, bpm, duration, intensity, analysis, levelData, addedDate }
     };
   }
+
+  const MAX_LIBRARY_SONGS = 8;
 
   function detectLowEnd() {
     const cores = navigator.hardwareConcurrency || 4;
@@ -269,6 +274,57 @@ const Storage = (() => {
     save();
   }
 
+  // ---------------- song library (cached analysis, keyed by audio hash) ----------------
+  function getCachedSong(hash) {
+    return load().songLibrary[hash] || null;
+  }
+
+  function cacheSongAnalysis(hash, name, analysis, levelData) {
+    const d = load();
+    d.songLibrary[hash] = {
+      name,
+      bpm: analysis.bpm,
+      duration: analysis.duration,
+      intensity: analysis.intensity,
+      analysis,
+      levelData,
+      addedDate: Date.now(),
+    };
+    let keys = Object.keys(d.songLibrary).sort((a, b) => d.songLibrary[a].addedDate - d.songLibrary[b].addedDate);
+    while (keys.length > MAX_LIBRARY_SONGS) {
+      delete d.songLibrary[keys.shift()];
+    }
+    // if the entry is too large for localStorage, evict oldest entries until it fits
+    while (keys.length > 0) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(d));
+        return;
+      } catch (e) {
+        delete d.songLibrary[keys.shift()];
+      }
+    }
+  }
+
+  function getLibrarySongs() {
+    const d = load();
+    return Object.keys(d.songLibrary).map(hash => {
+      const entry = d.songLibrary[hash];
+      const board = d.leaderboards[hash] || [];
+      const top = board[0] || null;
+      const playCount = (d.stats.songPlayCounts[hash] && d.stats.songPlayCounts[hash].count) || 0;
+      return {
+        hash,
+        name: entry.name,
+        bpm: entry.bpm,
+        duration: entry.duration,
+        addedDate: entry.addedDate,
+        bestScore: top ? Math.round(top.score) : null,
+        perfectRate: top ? top.perfectRate : null,
+        playCount,
+      };
+    }).sort((a, b) => b.addedDate - a.addedDate);
+  }
+
   // ---------------- stats ----------------
   function getStats() { return load().stats; }
 
@@ -280,6 +336,7 @@ const Storage = (() => {
     recordRunResult,
     getLeaderboard, getAllPlayedSongs, getEndlessLeaderboard, addEndlessScore,
     getTunerSettings, setTunerSettings,
+    getCachedSong, cacheSongAnalysis, getLibrarySongs,
     getStats,
     SKIN_UNLOCK_ACHIEVEMENT,
   };

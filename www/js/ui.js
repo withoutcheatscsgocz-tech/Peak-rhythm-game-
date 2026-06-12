@@ -171,6 +171,18 @@ const UI = (() => {
       if (debugLogSelect.value !== 'on') hideDebugOverlay();
     });
 
+    const tapSoundSelect = $('tap-sound-select');
+    tapSoundSelect.value = settings.tapSound || 'hihat';
+    tapSoundSelect.addEventListener('change', () => {
+      Storage.setSetting('tapSound', tapSoundSelect.value);
+    });
+
+    const songMapOverlaySelect = $('songmap-overlay-select');
+    songMapOverlaySelect.value = settings.songMapOverlay ? 'on' : 'off';
+    songMapOverlaySelect.addEventListener('change', () => {
+      Storage.setSetting('songMapOverlay', songMapOverlaySelect.value === 'on');
+    });
+
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');
@@ -185,6 +197,13 @@ const UI = (() => {
     });
   }
 
+  // ---------------- heartbeat idle dot ----------------
+  function setHeartbeatRate(elId, intervalSec) {
+    const el = $(elId);
+    if (!el) return;
+    el.style.setProperty('--beat-duration', `${Math.max(0.2, intervalSec).toFixed(3)}s`);
+  }
+
   // ---------------- analysis result ----------------
   function populateResult(songName, analysis) {
     $('result-name').textContent = songName || '-';
@@ -197,7 +216,144 @@ const UI = (() => {
     $('result-intensity').textContent = `${intensityPct}%`;
   }
 
+  // ---------------- song map preview (minimap of the generated level) ----------------
+  const ORB_CHAIN_GAP = 1.5; // sec - max gap between orbs to belong to the same chain
+
+  function buildOrbChains(track) {
+    const orbTimes = track.filter(t => t.type === 'weak').map(t => t.time).sort((a, b) => a - b);
+    const chains = [];
+    let current = null;
+    orbTimes.forEach((t) => {
+      if (current && t - current.end <= ORB_CHAIN_GAP) {
+        current.end = t;
+      } else {
+        current = { start: t, end: t };
+        chains.push(current);
+      }
+    });
+    return chains.filter(c => c.end > c.start); // chains of 2+ orbs
+  }
+
+  function populateSongMap(levelData) {
+    const canvas = $('song-map-canvas');
+    if (!levelData || !levelData.duration) { canvas.classList.add('hidden'); return; }
+    canvas.classList.remove('hidden');
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth || 320, h = canvas.clientHeight || 80;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const duration = levelData.duration;
+    const densityH = h * 0.7;
+    const chainY = h - 8;
+
+    // section background (density / drop highlighting)
+    (levelData.sections || []).forEach((sec) => {
+      const x = (sec.time / duration) * w;
+      const segW = (sec.duration / duration) * w;
+      ctx.fillStyle = SECTION_HEX[sec.type] || SECTION_HEX.chill;
+      ctx.globalAlpha = sec.type === 'drop' ? 0.28 : 0.12;
+      ctx.fillRect(x, 0, segW, densityH);
+    });
+    ctx.globalAlpha = 1;
+
+    // obstacle density histogram
+    const buckets = 60;
+    const counts = new Array(buckets).fill(0);
+    (levelData.track || []).forEach((t) => {
+      const b = clampVal(Math.floor((t.time / duration) * buckets), 0, buckets - 1);
+      counts[b]++;
+    });
+    const maxCount = Math.max(1, ...counts);
+    const bucketW = w / buckets;
+    for (let i = 0; i < buckets; i++) {
+      const barH = (counts[i] / maxCount) * (densityH - 4);
+      if (barH <= 0) continue;
+      const t = (i / buckets) * duration;
+      const sec = (levelData.sections || []).find(s => t >= s.time && t < s.time + s.duration);
+      ctx.fillStyle = SECTION_HEX[(sec && sec.type) || 'chill'];
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(i * bucketW, densityH - barH, Math.max(1, bucketW - 1), barH);
+    }
+    ctx.globalAlpha = 1;
+
+    // orb chains
+    ctx.strokeStyle = '#ffd24d';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    buildOrbChains(levelData.track || []).forEach((chain) => {
+      const x1 = (chain.start / duration) * w;
+      const x2 = Math.max(x1 + 2, (chain.end / duration) * w);
+      ctx.beginPath();
+      ctx.moveTo(x1, chainY);
+      ctx.lineTo(x2, chainY);
+      ctx.stroke();
+    });
+
+    // checkpoints
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1;
+    (levelData.checkpoints || []).forEach((t) => {
+      const x = (t / duration) * w;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    });
+  }
+
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+  function clampVal(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // ---------------- accuracy graph (complete screen) ----------------
+  const ACCURACY_RANGE_MS = 300;
+
+  function drawAccuracyGraph(history) {
+    const canvas = $('accuracy-graph');
+    if (!history || !history.length) { canvas.classList.add('hidden'); return; }
+    canvas.classList.remove('hidden');
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = canvas.clientWidth || 320, h = canvas.clientHeight || 110;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const maxTime = Math.max(1, ...history.map(p => p.time));
+    const midY = h / 2;
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, midY);
+    ctx.lineTo(w, midY);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '9px "Courier New", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('EARLY', 4, 11);
+    ctx.fillText('LATE', 4, h - 4);
+
+    history.forEach((p) => {
+      const x = clampVal((p.time / maxTime) * w, 1, w - 1);
+      if (p.grade === 'miss') {
+        ctx.fillStyle = 'rgba(255,59,59,0.55)';
+        ctx.fillRect(x - 1, 2, 2, h - 4);
+        return;
+      }
+      const deltaMs = clampVal(p.delta * 1000, -ACCURACY_RANGE_MS, ACCURACY_RANGE_MS);
+      const y = midY - (deltaMs / ACCURACY_RANGE_MS) * (h / 2 - 6);
+      ctx.fillStyle = p.grade === 'perfect' ? '#4dff7a' : '#ffd24d';
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
 
   // ---------------- beat tuner (3-band: bass / vocal / high) ----------------
   const TUNER_BANDS = ['bass', 'vocal', 'high'];
@@ -437,6 +593,23 @@ const UI = (() => {
         cpContainer.appendChild(cp);
       });
     }
+    const chainContainer = $('song-progress-orbchains');
+    chainContainer.innerHTML = '';
+    const showOverlay = Storage.getSettings().songMapOverlay;
+    if (showOverlay && levelData && levelData.track && duration > 0) {
+      chainContainer.classList.remove('hidden');
+      buildOrbChains(levelData.track).forEach(chainEl => {
+        const x1 = clamp01(chainEl.start / duration) * 100;
+        const x2 = clamp01(chainEl.end / duration) * 100;
+        const bar = document.createElement('div');
+        bar.className = 'chain';
+        bar.style.left = `${x1}%`;
+        bar.style.width = `${Math.max(0.4, x2 - x1)}%`;
+        chainContainer.appendChild(bar);
+      });
+    } else {
+      chainContainer.classList.add('hidden');
+    }
     $('song-progress-fill').style.width = '0%';
     $('song-progress-ghost').classList.add('hidden');
   }
@@ -564,6 +737,8 @@ const UI = (() => {
     addStatRow(stats, 'MISSES', result.hitCount);
     addStatRow(stats, 'MAX COMBO', result.maxCombo);
     addStatRow(stats, 'MULTIPLIER', `×${result.multiplier.toFixed(1)}`);
+
+    drawAccuracyGraph(result.hitHistory);
 
     const placement = $('placement-banner');
     if (rankInfo && rankInfo.leaderboardRank === 0) {
@@ -825,6 +1000,34 @@ const UI = (() => {
     return false;
   }
 
+  // ---------------- song library (cached analyzed songs) ----------------
+  function populateLibrary() {
+    const list = $('library-song-list');
+    list.innerHTML = '';
+    const songs = Storage.getLibrarySongs();
+    if (!songs.length) {
+      const empty = document.createElement('div');
+      empty.className = 'panel';
+      empty.textContent = 'No analyzed songs yet. Upload a song to add it to your library.';
+      list.appendChild(empty);
+      return;
+    }
+    songs.forEach(song => {
+      const item = document.createElement('div');
+      item.className = 'grid-item';
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = song.name;
+      const hint = document.createElement('div'); hint.className = 'item-hint';
+      const mins = Math.floor(song.duration / 60);
+      const secs = Math.floor(song.duration % 60);
+      const lengthStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      const bestStr = song.bestScore != null ? `${song.bestScore} pts` : '-';
+      const perfectStr = song.perfectRate != null ? `${(song.perfectRate * 100).toFixed(0)}%` : '-';
+      hint.textContent = `BPM ${song.bpm}  •  ${lengthStr}  •  BEST ${bestStr}  •  PERFECT ${perfectStr}  •  PLAYED ${song.playCount}x`;
+      item.appendChild(name); item.appendChild(hint);
+      list.appendChild(item);
+    });
+  }
+
   // ---------------- challenge codes ----------------
   function setChallengeMessage(text, isError) {
     const el = $('challenge-msg');
@@ -935,7 +1138,9 @@ const UI = (() => {
     showToast, showAchievementToasts, showThemeUnlockOverlay, showControllerToast,
     logDebugError, hideDebugOverlay, clearDebugLog,
     applyTheme,
+    setHeartbeatRate,
     populateResult,
+    populateSongMap,
     initTuner, readTunerSliders, drawTunerCanvas,
     setMicStatus, setMicTitle, showMicPermissionError, setMicCountdown, drawMicVisualizer,
     populateModifiers, getActiveModifiers, setActiveModifiers,
@@ -946,6 +1151,7 @@ const UI = (() => {
     populateComplete, populateEndlessComplete, populateMultiplayerComplete,
     populateThemesSkins, populateAchievements, populateStats, populateLeaderboards,
     leaderboardsGoBack,
+    populateLibrary,
     setChallengeMessage, getChallengeCodeInput, clearChallengeInput,
     initMultiSelect, addMultiSelectFile, setMultiSelectFileStatus, getMultiSelectFiles,
     initPassSetup, addPassPlayer, getPassPlayers,

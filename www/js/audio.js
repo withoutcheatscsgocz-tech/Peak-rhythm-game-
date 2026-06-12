@@ -399,6 +399,15 @@ const AudioEngine = (() => {
     return { buffer, analysis };
   }
 
+  // ---------------- procedural white noise buffer ----------------
+  function createNoiseBuffer(audioCtx, durationSec) {
+    const length = Math.max(1, Math.floor(audioCtx.sampleRate * durationSec));
+    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    return buffer;
+  }
+
   // ---------------- procedural reverb impulse response ----------------
   function createReverbImpulse(audioCtx, decaySec, preDelaySec) {
     decaySec = decaySec || 2.5;
@@ -447,6 +456,78 @@ const AudioEngine = (() => {
     gain.connect(audioCtx.destination);
     osc.start(time);
     osc.stop(time + 0.07);
+  }
+
+  // ---------------- tap sound picker (perfect-hit feedback) ----------------
+  const TAP_SOUNDS = ['hihat', 'clap', '808', 'laser'];
+
+  /** Crisp triangle sweep - the original "tick" sound. */
+  function playTapHiHat(audioCtx, time, gainValue) {
+    playTick(audioCtx, time, gainValue);
+  }
+
+  /** Layered noise bursts through a bandpass filter. */
+  function playTapClap(audioCtx, time, gainValue) {
+    gainValue = gainValue != null ? gainValue : 0.3;
+    const buffer = createNoiseBuffer(audioCtx, 0.2);
+    [0, 0.018, 0.036].forEach((offset, i) => {
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1500;
+      filter.Q.value = 1.2;
+      const gain = audioCtx.createGain();
+      const g = gainValue * (1 - i * 0.25);
+      gain.gain.setValueAtTime(g, time + offset);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + offset + 0.08);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      src.start(time + offset);
+      src.stop(time + offset + 0.1);
+    });
+  }
+
+  /** Deep pitch-dropping sine - classic 808 boom. */
+  function playTap808(audioCtx, time, gainValue) {
+    gainValue = gainValue != null ? gainValue : 0.5;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(48, time + 0.25);
+    gain.gain.setValueAtTime(gainValue, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.4);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + 0.42);
+  }
+
+  /** Sawtooth pitch sweep - retro laser zap. */
+  function playTapLaser(audioCtx, time, gainValue) {
+    gainValue = gainValue != null ? gainValue : 0.22;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1800, time);
+    osc.frequency.exponentialRampToValueAtTime(80, time + 0.15);
+    gain.gain.setValueAtTime(gainValue, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + 0.18);
+  }
+
+  function playTapSound(audioCtx, time, soundId, gainValue) {
+    switch (soundId) {
+      case 'clap': return playTapClap(audioCtx, time, gainValue);
+      case '808': return playTap808(audioCtx, time, gainValue);
+      case 'laser': return playTapLaser(audioCtx, time, gainValue);
+      default: return playTapHiHat(audioCtx, time, gainValue);
+    }
   }
 
   // ---------------- beat tuner per-band preview sounds ----------------
@@ -544,6 +625,7 @@ const AudioEngine = (() => {
     generateClickTrack,
     playBassThump, playVocalPluck, playHighClick,
     normalizeTunerSettings, defaultTunerSettings,
+    TAP_SOUNDS, playTapSound,
   };
 })();
 

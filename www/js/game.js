@@ -336,6 +336,7 @@ const Game = (() => {
       nextClickIndex: 0,
       finished: false, gameOver: false, completing: false,
       bgEnergy: 0,
+      hitHistory: carry.hitHistory || [],
     };
 
     const bpm = (session.levelData && session.levelData.bpm) || 120;
@@ -364,6 +365,7 @@ const Game = (() => {
       score: session.score, baseScore: session.baseScore,
       perfectCount: session.perfectCount, goodCount: session.goodCount, hitCount: session.hitCount,
       songTime: session.checkpoints[session.checkpointIndex] || 0,
+      hitHistory: session.hitHistory.slice(),
     };
   }
 
@@ -612,6 +614,7 @@ const Game = (() => {
         el.hit = true; el.hitType = 'perfect';
         triggerJump(songTime);
         applyHitResult(el, 'perfect', 0, songTime, realNow);
+        recordHit(songTime, 0, 'perfect');
         session.trackIndex++;
         continue;
       }
@@ -704,7 +707,7 @@ const Game = (() => {
       triggerHitStop(realNow);
       triggerScreenShake(el.energy || 0.5, realNow);
       Haptics.tapPerfect();
-      if (audioCtx) AudioEngine.playTick(audioCtx, realNow);
+      if (audioCtx) AudioEngine.playTapSound(audioCtx, realNow, Storage.getSettings().tapSound);
     } else {
       session.goodCount++;
       session.perfectStreak = 0;
@@ -719,9 +722,14 @@ const Game = (() => {
     checkComboMilestone();
   }
 
+  function recordHit(time, delta, grade) {
+    session.hitHistory.push({ time, delta, grade });
+  }
+
   function registerMiss(el, songTime) {
     el.hitType = 'miss';
     session.hitCount++;
+    if (el.type === 'strong') recordHit(songTime, null, 'miss');
     session.combo = 0;
     session.perfectStreak = 0;
     if (session.inDrop) session.dropHasHit = true;
@@ -761,6 +769,7 @@ const Game = (() => {
     session.trackIndex = snap.trackIndex;
     session.score = snap.score; session.baseScore = snap.baseScore;
     session.perfectCount = snap.perfectCount; session.goodCount = snap.goodCount; session.hitCount = snap.hitCount;
+    session.hitHistory = snap.hitHistory.slice();
     session.combo = 0; session.perfectStreak = 0;
     session.livesRemaining = session.modifiers.has('suddenDeath') ? 1 : 3;
     session.track.forEach((t, i) => {
@@ -867,6 +876,7 @@ const Game = (() => {
     el.hit = true; el.hitType = grade;
     if (session.practice && Game.onPracticeTiming) Game.onPracticeTiming(delta * 1000, grade);
     applyHitResult(el, grade, delta, songTime, realNow);
+    recordHit(songTime, delta, grade);
   }
 
   // ---------------- completion ----------------
@@ -933,6 +943,7 @@ const Game = (() => {
       dropSurvivedNoHit: session.dropSurvivedNoHit,
       mode: session.mode,
       practiceAnchor: session.checkpoints[session.checkpointIndex] || 0,
+      hitHistory: session.hitHistory.slice(),
     };
   }
 
