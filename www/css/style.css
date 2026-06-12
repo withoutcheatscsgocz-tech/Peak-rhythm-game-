@@ -328,6 +328,12 @@ input[type="range"] {
   font-size: 13px; letter-spacing: 3px; color: var(--accent-dim);
   background: rgba(0,0,0,0.4); padding: 4px 14px; border-radius: 12px;
 }
+.sync-offset-readout {
+  position: absolute; top: calc(96px + var(--safe-area-top)); left: 50%; transform: translateX(-50%);
+  font-size: 13px; letter-spacing: 2px; color: var(--accent);
+  background: rgba(0,0,0,0.5); padding: 6px 16px; border-radius: 12px;
+  text-align: center; white-space: nowrap;
+}
 .hidden { display: none !important; }
 
 /* ============================================================

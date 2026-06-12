@@ -337,6 +337,7 @@ const Game = (() => {
       finished: false, gameOver: false, completing: false,
       bgEnergy: 0,
       hitHistory: carry.hitHistory || [],
+      syncOffsets: [],
     };
 
     const bpm = (session.levelData && session.levelData.bpm) || 120;
@@ -880,6 +881,8 @@ const Game = (() => {
     const latency = (Storage.getSettings().latencyOffset || 0) / 1000;
     const adjusted = songTime + latency;
 
+    if (session.mode === 'synctest') recordSyncOffsetSample(songTime);
+
     session.jumps++;
 
     if (session.modifiers.has('autoJump')) return;
@@ -904,6 +907,33 @@ const Game = (() => {
     if (session.practice && Game.onPracticeTiming) Game.onPracticeTiming(delta * 1000, grade);
     recordHit(songTime, delta, grade);
     session.trackIndex++;
+  }
+
+  /**
+   * SYNC TEST calibration: records how far (in ms) this tap landed from the
+   * nearest click (every 0.5s in the 120 BPM track), *without* the current
+   * latencyOffset applied, so the test produces a usable measurement even
+   * when the player is currently mis-calibrated (and would otherwise only
+   * ever see MISS with no clue which way to move the slider). The 0.5s click
+   * spacing gives +-250ms of unambiguous range; the live readout uses the
+   * median, which stays close to the true offset even with the occasional
+   * sample that lands just past the +-250ms boundary and wraps to the
+   * neighbouring click.
+   */
+  function recordSyncOffsetSample(songTime) {
+    const beatInterval = (60 / ((session.levelData && session.levelData.bpm) || 120));
+    const nearest = Math.round(songTime / beatInterval) * beatInterval;
+    const offsetMs = (songTime - nearest) * 1000;
+    session.syncOffsets.push(offsetMs);
+    const usable = session.syncOffsets.filter(v => Math.abs(v) <= 250);
+    const avgMs = usable.length ? median(usable) : null;
+    if (Game.onSyncTap) Game.onSyncTap({ offsetMs, avgMs, count: session.syncOffsets.length, usableCount: usable.length });
+  }
+
+  function median(values) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   }
 
   // ---------------- completion ----------------
@@ -971,6 +1001,7 @@ const Game = (() => {
       mode: session.mode,
       practiceAnchor: session.checkpoints[session.checkpointIndex] || 0,
       hitHistory: session.hitHistory.slice(),
+      syncOffsets: session.syncOffsets.slice(),
     };
   }
 

@@ -136,12 +136,24 @@ const UI = (() => {
   }
 
   // ---------------- settings screen ----------------
-  function initSettingsScreen() {
-    const settings = Storage.getSettings();
+  /** Syncs both latency sliders (settings + pause screen) to the stored value. */
+  function refreshLatencySliders() {
+    const v = Storage.getSettings().latencyOffset || 0;
     const latencySlider = $('latency-slider');
     const latencyValue = $('latency-value');
-    latencySlider.value = settings.latencyOffset || 0;
-    latencyValue.textContent = `${settings.latencyOffset || 0}ms`;
+    if (latencySlider) latencySlider.value = v;
+    if (latencyValue) latencyValue.textContent = `${v}ms`;
+    const pauseSlider = $('pause-latency-slider');
+    const pauseValue = $('pause-latency-value');
+    if (pauseSlider) pauseSlider.value = v;
+    if (pauseValue) pauseValue.textContent = `${v}ms`;
+  }
+
+  function initSettingsScreen() {
+    const settings = Storage.getSettings();
+    refreshLatencySliders();
+    const latencySlider = $('latency-slider');
+    const latencyValue = $('latency-value');
     latencySlider.addEventListener('input', () => {
       const v = parseInt(latencySlider.value, 10);
       latencyValue.textContent = `${v}ms`;
@@ -186,8 +198,6 @@ const UI = (() => {
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');
-    pauseSlider.value = settings.latencyOffset || 0;
-    pauseValue.textContent = `${settings.latencyOffset || 0}ms`;
     pauseSlider.addEventListener('input', () => {
       const v = parseInt(pauseSlider.value, 10);
       pauseValue.textContent = `${v}ms`;
@@ -526,7 +536,27 @@ const UI = (() => {
 
   // ---------------- game HUD ----------------
   function showHUD() { $('game-hud').classList.remove('hidden'); }
-  function hideHUD() { $('game-hud').classList.add('hidden'); }
+  function hideHUD() { $('game-hud').classList.add('hidden'); hideSyncOffsetReadout(); }
+
+  // ---------------- sync test live offset readout ----------------
+  function showSyncOffsetReadout() {
+    const el = $('sync-offset-readout');
+    el.textContent = 'TAP ALONG TO THE CLICKS...';
+    el.classList.remove('hidden');
+  }
+  function hideSyncOffsetReadout() {
+    $('sync-offset-readout').classList.add('hidden');
+  }
+  function updateSyncOffsetReadout(info) {
+    const el = $('sync-offset-readout');
+    if (info.avgMs == null) {
+      el.textContent = `OFF-GRID TAP (${Math.round(info.offsetMs)}ms) - keep tapping on the clicks`;
+      return;
+    }
+    const ms = Math.round(info.avgMs);
+    const dir = ms > 0 ? 'LATE' : ms < 0 ? 'EARLY' : 'SPOT ON';
+    el.textContent = `AVG: ${ms > 0 ? '+' : ''}${ms}ms ${dir} (${info.usableCount} taps)`;
+  }
 
   function setupProgressBar(levelData) {
     const segContainer = $('song-progress-sections');
@@ -1094,6 +1124,7 @@ const UI = (() => {
     populateModifiers, getActiveModifiers, setActiveModifiers,
     setCountdownNumber,
     showHUD, hideHUD, setupProgressBar, updateHUD, flashCombo,
+    showSyncOffsetReadout, hideSyncOffsetReadout, updateSyncOffsetReadout, refreshLatencySliders,
     setReplayToastVisible, setPlayerBanner, hidePlayerBanner, setEndlessBanner, hideEndlessBanner,
     resetPractice, updatePracticeFeedback, updatePracticeProgress,
     populateComplete, populateEndlessComplete, populateMultiplayerComplete,

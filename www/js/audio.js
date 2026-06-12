@@ -369,26 +369,52 @@ const AudioEngine = (() => {
     const beatFold = foldAt(gameNov, beatPeriodFrames);
     let beatPhaseSec = (beatFold.phaseFrames * hopTime + ONSET_LATENCY_CORRECTION) % beatSec;
 
-    // ---- 5. gentle snap (cosmetic only) + spacing + strengths ----
-    const eighthSec = beatSec / 2;
-    const SNAP_TOL = 0.03;
-    let events = rawOnsets.map(o => {
-      const k = Math.round((o.time - beatPhaseSec) / eighthSec);
-      const gridT = beatPhaseSec + k * eighthSec;
-      const useGrid = k >= 0 && Math.abs(gridT - o.time) <= SNAP_TOL;
-      return { time: useGrid ? gridT : o.time, strength: o.strength, snapped: useGrid };
-    }).filter(e => e.time >= 0 && e.time <= duration - 0.05);
-
+    // ---- 5. grid snap (straightness-scaled) + spacing + strengths ----
+    // Events stay at their TRUE detected times unless the song is clearly
+    // grid-quantized, in which case we pull each onset onto the nearest
+    // 16th-note line to erase sub-frame detection jitter and make the chart
+    // feel machine-tight. Swung / live / loosely-played tracks sit
+    // consistently OFF the straight grid, so we detect that ("straightness")
+    // and barely snap them, preserving the groove the player actually hears.
+    const sixteenthSec = beatSec / 4;
     const minSpacing = Math.max(0.16, t.bass.minSpacing != null ? t.bass.minSpacing : 0.18);
-    events.sort((a, b) => a.time - b.time);
-    const spaced = [];
-    for (const e of events) {
-      const last = spaced[spaced.length - 1];
-      if (last && e.time - last.time < minSpacing) {
-        if (e.strength > last.strength) spaced[spaced.length - 1] = e;
-      } else spaced.push(e);
+
+    function dedupe(list) {
+      list.sort((a, b) => a.time - b.time);
+      const out = [];
+      for (const e of list) {
+        const last = out[out.length - 1];
+        if (last && e.time - last.time < minSpacing) {
+          if (e.strength > last.strength) out[out.length - 1] = e;
+        } else out.push(e);
+      }
+      return out;
     }
-    events = spaced;
+
+    // base set: true onset times, deduped by spacing
+    let events = dedupe(rawOnsets
+      .map(o => ({ time: o.time, strength: o.strength, snapped: false }))
+      .filter(e => e.time >= 0 && e.time <= duration - 0.05));
+
+    // straightness = fraction of near-grid events sitting within 20ms of a
+    // 16th line. High -> programmed/quantized -> snap hard; low -> groove ->
+    // snap barely (just remove the worst few-ms detection jitter).
+    let near = 0, total = 0;
+    for (const e of events) {
+      const k = Math.round((e.time - beatPhaseSec) / sixteenthSec);
+      const dev = Math.abs(e.time - (beatPhaseSec + k * sixteenthSec));
+      if (dev <= sixteenthSec * 0.5) { total++; if (dev <= 0.02) near++; }
+    }
+    const straightness = total ? near / total : 0;
+    const snapTol = 0.018 + 0.030 * clamp01((straightness - 0.45) / 0.25);
+
+    for (const e of events) {
+      const k = Math.round((e.time - beatPhaseSec) / sixteenthSec);
+      const gridT = beatPhaseSec + k * sixteenthSec;
+      if (k >= 0 && Math.abs(gridT - e.time) <= snapTol) { e.time = gridT; e.snapped = true; }
+    }
+    // snapping can pull two onsets onto the same / adjacent line - re-dedupe
+    events = dedupe(events);
     const strengths = events.map(e => e.strength).sort((a, b) => a - b);
     const sP95 = strengths.length ? strengths[Math.floor(strengths.length * 0.95)] : 1;
     events.forEach(e => { e.strength = clamp01(e.strength / (sP95 || 1)); });

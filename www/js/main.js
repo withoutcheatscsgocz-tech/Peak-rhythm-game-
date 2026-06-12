@@ -424,6 +424,7 @@ const App = (() => {
       // noFail keeps the test running uninterrupted for the full 32s so
       // sync drift can be observed without checkpoint restarts.
       await startCountdown({ modifiers: new Set(['noFail']) });
+      UI.showSyncOffsetReadout();
     } catch (e) {
       console.error(e);
       UI.showToast('Could not start sync test.');
@@ -431,6 +432,30 @@ const App = (() => {
       UI.showScreen('screen-settings', false);
       resetSessionState();
     }
+  }
+
+  /**
+   * Auto-calibrates the Audio Latency Offset from the raw tap-vs-beat
+   * offsets measured during the sync test (independent of whatever offset
+   * was already set), so the test produces a usable result even when the
+   * player started out badly out of sync (which would otherwise show MISS
+   * on every tap with no clue which way to move the slider).
+   */
+  function finishSyncTest(result) {
+    const offsets = (result.syncOffsets || []).filter(v => Math.abs(v) <= 250);
+    if (!offsets.length) {
+      UI.showToast('SYNC TEST COMPLETE - tap along to the clicks next time to auto-calibrate!');
+      return;
+    }
+    const sorted = offsets.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const avgMs = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    const prevOffset = Storage.getSettings().latencyOffset || 0;
+    let next = Math.round(-avgMs / 5) * 5;
+    next = Math.max(-300, Math.min(300, next));
+    Storage.setSetting('latencyOffset', next);
+    const sign = avgMs > 0 ? '+' : '';
+    UI.showToast(`SYNC TEST COMPLETE - taps were ${sign}${Math.round(avgMs)}ms off, Latency Offset set to ${next}ms`);
   }
 
   // ---------------- beat tuner ----------------
@@ -552,6 +577,7 @@ const App = (() => {
       if (current.mode === 'tutorial') maybeShowTutorialHint(state.songTime);
     };
     Game.onComboMilestone = () => UI.flashCombo();
+    Game.onSyncTap = (info) => UI.updateSyncOffsetReadout(info);
     Game.onMiss = () => {};
     Game.onRecovery = () => UI.showToast('BACK ON TRACK');
     Game.onCheckpoint = () => {};
@@ -588,9 +614,10 @@ const App = (() => {
     if (current.mode === 'multiplayer') { handleMultiplayerSegmentComplete(result); return; }
     if (current.mode === 'playlist') { handlePlaylistSegmentComplete(result); return; }
     if (current.mode === 'synctest') {
-      UI.showToast('SYNC TEST COMPLETE');
+      finishSyncTest(result);
       UI.resetNav();
       UI.showScreen('screen-settings', false);
+      UI.refreshLatencySliders();
       resetSessionState();
       return;
     }
