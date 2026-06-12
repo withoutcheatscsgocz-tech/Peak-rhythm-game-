@@ -101,10 +101,12 @@ const AudioEngine = (() => {
    * Full offline analysis pipeline: bandpass-filters the mono mix down to the
    * bass band (~40-150Hz, where kick/bass-drum hits live) and runs
    * rolling-average onset detection on its windowed energy to find
-   * bassBeats -> the spike obstacles' beat timeline. A 512-sample window
-   * (~11.6ms @ 44.1kHz) keeps onset times closely aligned to the audible hit.
-   * A combined `beats` array is also returned for backward-compat (metronome
-   * ring, BPM ONLY clicks, tuner overview).
+   * bassBeats. A 512-sample window (~11.6ms @ 44.1kHz) keeps onset times
+   * closely aligned to the audible hit. `bpm` and `phase` are derived from
+   * bassBeats so Level.generate can build a steady BPM-locked grid -> a
+   * spike obstacle on every beat of the whole song. A combined `beats`
+   * array is also returned for backward-compat (metronome ring, BPM ONLY
+   * clicks, tuner overview).
    */
   async function analyze(audioBuffer, tunerSettings, onProgress) {
     const t = normalizeTunerSettings(tunerSettings);
@@ -179,6 +181,22 @@ const AudioEngine = (() => {
       }
     }
 
+    // phase: circular mean of each bass onset's offset within a beat
+    // interval, so the BPM grid (used to place a spike on every beat)
+    // lines up with where the kicks actually land.
+    let phase = 0;
+    if (bassBeats.length > 0) {
+      const beatInterval = 60 / bpm;
+      let sumSin = 0, sumCos = 0;
+      bassBeats.forEach(b => {
+        const angle = (2 * Math.PI * b.time) / beatInterval;
+        sumSin += Math.sin(angle);
+        sumCos += Math.cos(angle);
+      });
+      const meanAngle = Math.atan2(sumSin, sumCos);
+      phase = ((meanAngle / (2 * Math.PI)) * beatInterval + beatInterval) % beatInterval;
+    }
+
     // section detection via rolling RMS over 2s windows of the mono mix
     const sectionWindowSec = 2;
     const sectionWindowSize = Math.round(sectionWindowSec * sampleRate);
@@ -214,6 +232,7 @@ const AudioEngine = (() => {
 
     return {
       bpm: Math.round(bpm),
+      phase,
       duration: audioBuffer.duration,
       beats,
       bassBeats,
@@ -284,6 +303,7 @@ const AudioEngine = (() => {
 
     const analysis = {
       bpm,
+      phase: 0,
       duration,
       beats,
       bassBeats,
