@@ -15,6 +15,9 @@ const Cloud = (() => {
   const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 
   const SONGS_BUCKET = 'songs';
+  // Keep in sync with the bucket's file_size_limit in PUBLIC_LIBRARY_SETUP.sql.
+  const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
+  const ALLOWED_AUDIO_EXT = ['mp3', 'm4a', 'aac', 'ogg', 'opus', 'wav', 'flac', 'mp4', 'webm'];
 
   function isConfigured() {
     return !!SUPABASE_URL && !!SUPABASE_ANON_KEY
@@ -116,7 +119,14 @@ const Cloud = (() => {
    */
   async function publishLevel(opts) {
     if (!isConfigured()) throw new Error('Cloud not configured');
-    const ext = (opts.fileName || '').split('.').pop().toLowerCase() || 'mp3';
+    const file = opts.audioFile;
+    if (file && file.size > MAX_UPLOAD_BYTES) {
+      const err = new Error('File too large');
+      err.code = 'TOO_LARGE';
+      throw err;
+    }
+    let ext = (opts.fileName || '').split('.').pop().toLowerCase();
+    if (!ALLOWED_AUDIO_EXT.includes(ext)) ext = 'mp3';
     const storagePath = `${opts.songHash}-${Date.now().toString(36)}.${ext}`;
 
     const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${SONGS_BUCKET}/${storagePath}`, {
@@ -146,6 +156,7 @@ const Cloud = (() => {
 
   return {
     isConfigured,
+    MAX_UPLOAD_BYTES,
     fetchPublicLevels, fetchLevel,
     fetchLeaderboard, submitScore, incrementPlayCount,
     reportLevel,

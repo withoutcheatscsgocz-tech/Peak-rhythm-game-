@@ -81,10 +81,19 @@ $$ language sql security definer;
 
 grant execute on function report_level(uuid) to anon;
 
--- Storage bucket for uploaded song audio files
-insert into storage.buckets (id, name, public)
-values ('songs', 'songs', true)
-on conflict (id) do nothing;
+-- Storage bucket for uploaded song audio files.
+-- A 15 MB per-file cap + audio-only MIME whitelist keep uploads cheap and
+-- stop the bucket being abused as generic file hosting. Supabase enforces
+-- both server-side, so a hacked client still cannot bypass them.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'songs', 'songs', true,
+  15728640,  -- 15 MB
+  array['audio/mpeg','audio/mp3','audio/mp4','audio/aac','audio/ogg','audio/opus','audio/wav','audio/x-wav','audio/flac','audio/x-m4a','audio/webm']
+)
+on conflict (id) do update
+  set file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "songs are publicly readable" on storage.objects;
 create policy "songs are publicly readable" on storage.objects

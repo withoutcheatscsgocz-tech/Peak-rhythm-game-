@@ -416,6 +416,11 @@ const App = (() => {
       UI.setPublishStatus('Public Library is not configured for this build yet.', true);
       return;
     }
+    if (current.songFile.size > Cloud.MAX_UPLOAD_BYTES) {
+      const mb = (Cloud.MAX_UPLOAD_BYTES / (1024 * 1024)).toFixed(0);
+      UI.setPublishStatus(`This song is too large to publish (max ${mb} MB). Try a shorter clip or a smaller file.`, true);
+      return;
+    }
     const title = UI.getPublishTitle() || current.songName || 'Untitled';
     UI.setPublishStatus('Publishing...');
     try {
@@ -433,7 +438,12 @@ const App = (() => {
       UI.setPublishStatus('Published! Other players can now find this in the Public Library.');
     } catch (e) {
       console.error(e);
-      UI.setPublishStatus('Could not publish (check connection).', true);
+      if (e && (e.code === 'TOO_LARGE' || /413|too large/i.test(String(e.message)))) {
+        const mb = (Cloud.MAX_UPLOAD_BYTES / (1024 * 1024)).toFixed(0);
+        UI.setPublishStatus(`This song is too large to publish (max ${mb} MB).`, true);
+      } else {
+        UI.setPublishStatus('Could not publish (check connection).', true);
+      }
     }
   }
 
