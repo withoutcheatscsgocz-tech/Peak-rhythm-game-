@@ -512,6 +512,11 @@ input[type="range"] {
 }
 .public-library-item .item-body { flex: 1; min-width: 0; }
 .public-library-item .btn { margin: 0; flex-shrink: 0; }
+.public-library-item .item-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.public-library-item .item-actions .btn.ghost {
+  margin: 0; padding: 12px 10px; min-width: 40px; line-height: 1;
+}
+.public-library-item .item-actions .btn.ghost:disabled { opacity: 0.5; }
 
 .public-level-badge {
   width: 100%; max-width: 420px; text-align: center;

@@ -355,11 +355,24 @@ const App = (() => {
     UI.showScreen('screen-public-library');
     try {
       const levels = await Cloud.fetchPublicLevels();
-      UI.populatePublicLibrary(levels, playPublicLevel);
+      UI.populatePublicLibrary(levels, playPublicLevel, reportPublicLevel);
     } catch (e) {
       console.error(e);
       UI.showToast('Could not load Public Library (check connection).');
-      UI.populatePublicLibrary([], playPublicLevel);
+      UI.populatePublicLibrary([], playPublicLevel, reportPublicLevel);
+    }
+  }
+
+  /** Flags a shared level for moderation; the server auto-hides it past a threshold. */
+  async function reportPublicLevel(level, onDone) {
+    if (!level || !Cloud.isConfigured()) return;
+    try {
+      await Cloud.reportLevel(level.id);
+      if (onDone) onDone();
+      UI.showToast('Reported. Thanks - flagged levels are hidden automatically.');
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not report this level (check connection).');
     }
   }
 

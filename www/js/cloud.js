@@ -86,6 +86,18 @@ const Cloud = (() => {
     });
   }
 
+  // ---------------- moderation ----------------
+  /** Flags a shared level; the server auto-hides it once enough players report it. */
+  async function reportLevel(levelId) {
+    if (!isConfigured()) return;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/report_level`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ p_level_id: levelId }),
+    });
+    if (!res.ok) throw new Error(`reportLevel failed: ${res.status}`);
+  }
+
   // ---------------- song audio storage ----------------
   async function downloadSong(storagePath) {
     if (!isConfigured()) throw new Error('Cloud not configured');
@@ -136,6 +148,7 @@ const Cloud = (() => {
     isConfigured,
     fetchPublicLevels, fetchLevel,
     fetchLeaderboard, submitScore, incrementPlayCount,
+    reportLevel,
     downloadSong, publishLevel,
   };
 })();

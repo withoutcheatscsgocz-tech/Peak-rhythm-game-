@@ -1032,7 +1032,7 @@ const UI = (() => {
   }
 
   // ---------------- public library (shared songs/levels) ----------------
-  function populatePublicLibrary(levels, onPlay) {
+  function populatePublicLibrary(levels, onPlay, onReport) {
     const list = $('public-library-list');
     list.innerHTML = '';
     if (!Cloud.isConfigured()) {
@@ -1060,11 +1060,26 @@ const UI = (() => {
       const lengthStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
       hint.textContent = `BY ${level.author_name}  •  BPM ${Math.round(level.bpm || 0)}  •  ${lengthStr}  •  ${level.play_count || 0} PLAYS`;
       body.appendChild(name); body.appendChild(hint);
+      const actions = document.createElement('div');
+      actions.className = 'item-actions';
       const playBtn = document.createElement('button');
       playBtn.className = 'btn small focusable';
       playBtn.textContent = 'PLAY';
       playBtn.addEventListener('click', () => onPlay(level));
-      item.appendChild(body); item.appendChild(playBtn);
+      actions.appendChild(playBtn);
+      if (onReport) {
+        const reportBtn = document.createElement('button');
+        reportBtn.className = 'btn small ghost focusable';
+        reportBtn.title = 'Report this level';
+        reportBtn.setAttribute('aria-label', 'Report this level');
+        reportBtn.textContent = '⚑';
+        reportBtn.addEventListener('click', () => {
+          if (reportBtn.disabled) return;
+          onReport(level, () => { reportBtn.disabled = true; reportBtn.textContent = '✓'; });
+        });
+        actions.appendChild(reportBtn);
+      }
+      item.appendChild(body); item.appendChild(actions);
       list.appendChild(item);
     });
   }

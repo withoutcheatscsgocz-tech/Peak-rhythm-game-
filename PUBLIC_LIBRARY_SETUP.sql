@@ -20,8 +20,12 @@ create table if not exists levels (
   level_data jsonb not null,   -- { analysis, levelData } - same shape used locally
   storage_path text not null,  -- path inside the "songs" storage bucket
   play_count integer not null default 0,
+  report_count integer not null default 0,  -- community moderation: auto-hidden past a threshold
   created_at timestamptz not null default now()
 );
+
+-- (idempotent) add moderation column to projects created before this column existed
+alter table levels add column if not exists report_count integer not null default 0;
 
 -- Global leaderboard entries, one per finished run on a shared level
 create table if not exists scores (
@@ -43,8 +47,10 @@ create index if not exists scores_level_id_score_idx on scores (level_id, score 
 alter table levels enable row level security;
 alter table scores enable row level security;
 
+-- Levels are public UNLESS the community has flagged them enough times
+-- (5+ reports) - flagged levels disappear from every client automatically.
 drop policy if exists "levels are publicly readable" on levels;
-create policy "levels are publicly readable" on levels for select using (true);
+create policy "levels are publicly readable" on levels for select using (report_count < 5);
 
 drop policy if exists "anyone can publish a level" on levels;
 create policy "anyone can publish a level" on levels for insert with check (true);
@@ -65,6 +71,15 @@ returns void as $$
 $$ language sql security definer;
 
 grant execute on function increment_play_count(uuid) to anon;
+
+-- RPC used to flag a level for moderation (atomic increment). Once a level
+-- reaches 5 reports the read policy above hides it from everyone.
+create or replace function report_level(p_level_id uuid)
+returns void as $$
+  update levels set report_count = report_count + 1 where id = p_level_id;
+$$ language sql security definer;
+
+grant execute on function report_level(uuid) to anon;
 
 -- Storage bucket for uploaded song audio files
 insert into storage.buckets (id, name, public)
