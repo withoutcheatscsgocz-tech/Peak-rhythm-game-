@@ -18,6 +18,11 @@ const Storage = (() => {
     { id: 'collector',   name: 'COLLECTOR',     icon: '\u{1F3A8}', hint: 'Unlock all themes' },
     { id: 'nightShift',  name: 'NIGHT SHIFT',   icon: '\u{1F319}', hint: 'Play 10 songs total', cumulative: 'totalSongsPlayed', target: 10 },
     { id: 'perfectTen',  name: 'PERFECT TEN',   icon: '\u{1F3AF}', hint: 'Get 10 perfects in a row, 5 times in one song' },
+    { id: 'centurion',   name: 'CENTURION',     icon: '\u{1F4AF}', hint: 'Reach a 100 combo' },
+    { id: 'suddenDeathSurvivor', name: 'NERVES OF STEEL', icon: '\u{1F480}', hint: 'Finish a song with SUDDEN DEATH on' },
+    { id: 'bpmPurist',   name: 'PURE RHYTHM',   icon: '\u{1F3B5}', hint: 'Finish a song with BPM ONLY on' },
+    { id: 'ghostBuster', name: 'GHOST BUSTER',  icon: '\u{1F47B}', hint: 'Beat your ghost with GHOST DOT on' },
+    { id: 'dedication',  name: 'DEDICATION',    icon: '⏱️', hint: 'Play for 1 hour total (lifetime)', cumulative: 'totalPlayTimeSec', target: 3600 },
   ];
 
   const THEME_DEFS = [
@@ -26,6 +31,9 @@ const Storage = (() => {
     { id: 'matrix',     name: 'MATRIX',      hint: 'Reach a 100+ combo' },
     { id: 'bloodmoon',  name: 'BLOOD MOON',  hint: 'Finish a song with INSANE 1.5x' },
     { id: 'goldenhour', name: 'GOLDEN HOUR', hint: '95%+ perfect rate on a finished song' },
+    { id: 'frost',      name: 'FROST',       hint: 'Unlock the PERFECT TEN achievement' },
+    { id: 'sunset',     name: 'SUNSET',      hint: 'Finish a song with RUSH 1.25x' },
+    { id: 'inferno',    name: 'INFERNO',     hint: 'Unlock the NERVES OF STEEL achievement' },
   ];
 
   const SKIN_DEFS = [
@@ -35,12 +43,15 @@ const Storage = (() => {
     { id: 'smiley',  name: 'SMILEY',  hint: 'Unlock via NIGHT SHIFT achievement' },
     { id: 'diamond', name: 'DIAMOND', hint: 'Unlock via COMBO KING achievement' },
     { id: 'pulsar',  name: 'PULSAR',  hint: 'Unlock via COLLECTOR achievement' },
+    { id: 'nova',    name: 'NOVA',    hint: 'Unlock via CENTURION achievement' },
+    { id: 'phantom', name: 'PHANTOM', hint: 'Unlock via GHOST BUSTER achievement' },
   ];
 
   // skin id -> achievement id required
   const SKIN_UNLOCK_ACHIEVEMENT = {
     star: 'flawless', comet: 'speedDemon', smiley: 'nightShift',
     diamond: 'comboKing', pulsar: 'collector',
+    nova: 'centurion', phantom: 'ghostBuster',
   };
 
   function defaultData() {
@@ -56,8 +67,8 @@ const Storage = (() => {
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
       },
-      themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false },
-      skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false },
+      themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false },
+      skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false },
       achievements: {}, // id -> true
       stats: {
         totalPlayTimeSec: 0,
@@ -199,12 +210,18 @@ const Storage = (() => {
       if (result.modifiers && result.modifiers.includes('blindRing') && unlockAchievement('blindFaith')) newAchievements.push('blindFaith');
       if (result.modifiers && result.modifiers.includes('insane') && unlockAchievement('speedDemon')) newAchievements.push('speedDemon');
       if ((result.perfectStreaksOf10 || 0) >= 5 && unlockAchievement('perfectTen')) newAchievements.push('perfectTen');
+      if (result.modifiers && result.modifiers.includes('suddenDeath') && unlockAchievement('suddenDeathSurvivor')) newAchievements.push('suddenDeathSurvivor');
+      if (result.modifiers && result.modifiers.includes('bpmOnly') && unlockAchievement('bpmPurist')) newAchievements.push('bpmPurist');
+      if (result.modifiers && result.modifiers.includes('ghostDot') && (result.ghostDelta || 0) > 0 && unlockAchievement('ghostBuster')) newAchievements.push('ghostBuster');
 
       // theme unlocks
       if (unlockTheme('vaporwave')) newThemes.push('vaporwave');
       if (result.maxCombo >= 100 && unlockTheme('matrix')) newThemes.push('matrix');
       if (result.modifiers && result.modifiers.includes('insane') && unlockTheme('bloodmoon')) newThemes.push('bloodmoon');
       if (perfectRate >= 0.95 && unlockTheme('goldenhour')) newThemes.push('goldenhour');
+      if (isAchievementUnlocked('perfectTen') && unlockTheme('frost')) newThemes.push('frost');
+      if (result.modifiers && result.modifiers.includes('rush') && unlockTheme('sunset')) newThemes.push('sunset');
+      if (isAchievementUnlocked('suddenDeathSurvivor') && unlockTheme('inferno')) newThemes.push('inferno');
 
       // leaderboard
       if (result.songHash) {
@@ -227,8 +244,10 @@ const Storage = (() => {
     }
 
     if ((result.maxCombo || 0) >= 200 && unlockAchievement('comboKing')) newAchievements.push('comboKing');
+    if ((result.maxCombo || 0) >= 100 && unlockAchievement('centurion')) newAchievements.push('centurion');
     if (s.totalJumps >= 1000 && unlockAchievement('marathon')) newAchievements.push('marathon');
     if (s.totalSongsPlayed >= 10 && unlockAchievement('nightShift')) newAchievements.push('nightShift');
+    if (s.totalPlayTimeSec >= 3600 && unlockAchievement('dedication')) newAchievements.push('dedication');
 
     // collector + dependent skin unlocks (check after theme unlocks above)
     if (allThemesUnlocked() && unlockAchievement('collector')) newAchievements.push('collector');

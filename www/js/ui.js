@@ -11,6 +11,7 @@ const UI = (() => {
   };
   const THEME_SWATCH = {
     default: '#ffffff', vaporwave: '#ff8cf0', matrix: '#4dff7a', bloodmoon: '#ff4d4d', goldenhour: '#ffd24d',
+    frost: '#b3f0ff', sunset: '#ff9a5a', inferno: '#ff6a00',
   };
   const PLAYER_COLORS = ['#ffffff', '#ff5a3c', '#3cffb0', '#6a8dff'];
 

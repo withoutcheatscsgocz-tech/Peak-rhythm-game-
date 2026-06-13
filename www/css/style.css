@@ -34,6 +34,21 @@ body[data-theme="goldenhour"] {
   --accent-dim: #ff9a3c;
   --section-color: #ffb84d;
 }
+body[data-theme="frost"] {
+  --accent: #b3f0ff;
+  --accent-dim: #4a8fa8;
+  --section-color: #7fdfff;
+}
+body[data-theme="sunset"] {
+  --accent: #ff9a5a;
+  --accent-dim: #c2487a;
+  --section-color: #ff6f9d;
+}
+body[data-theme="inferno"] {
+  --accent: #ff6a00;
+  --accent-dim: #8a1a00;
+  --section-color: #ff3300;
+}
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
 

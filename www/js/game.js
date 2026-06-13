@@ -71,6 +71,8 @@ const Game = (() => {
     { id: 'smiley', name: 'SMILEY' },
     { id: 'diamond', name: 'DIAMOND' },
     { id: 'pulsar', name: 'PULSAR' },
+    { id: 'nova', name: 'NOVA' },
+    { id: 'phantom', name: 'PHANTOM' },
   ];
 
   const SKIN_RENDERERS = {
@@ -120,6 +122,33 @@ const Game = (() => {
       ctx.beginPath(); ctx.arc(x, y, r * 1.35 + Math.sin(t * 4) * 2, 0, Math.PI * 2);
       ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.globalAlpha = 0.6; ctx.stroke();
       ctx.globalAlpha = 1;
+    },
+    nova(ctx, x, y, r, color, t) {
+      const rays = 8;
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      for (let i = 0; i < rays; i++) {
+        const ang = (Math.PI * 2 / rays) * i + t * 0.8;
+        const innerR = r * 0.9, outerR = r * 1.6 + Math.sin(t * 5 + i) * 3;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(ang) * innerR, y + Math.sin(ang) * innerR);
+        ctx.lineTo(x + Math.cos(ang) * outerR, y + Math.sin(ang) * outerR);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    },
+    phantom(ctx, x, y, r, color, t) {
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.arc(x - r * 0.7, y + Math.sin(t * 3) * 2, r * 0.85, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath(); ctx.arc(x - r * 0.35, y + Math.sin(t * 3 + 1) * 2, r * 0.95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
     },
   };
 
@@ -962,6 +991,7 @@ const Game = (() => {
       songHash: session.songMeta.hash, songName: session.songMeta.name,
       perfectStreaksOf10: session.perfectStreaksOf10Count,
       dropSurvivedNoHit: session.dropSurvivedNoHit,
+      ghostDelta: session.ghostDelta,
       mode: session.mode,
       practiceAnchor: session.checkpoints[session.checkpointIndex] || 0,
       hitHistory: session.hitHistory.slice(),
