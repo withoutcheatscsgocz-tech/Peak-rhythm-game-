@@ -467,7 +467,6 @@ const AudioEngine = (() => {
       }
     }
     const sectionAt = (time) => sections[Math.min(sections.length - 1, Math.max(0, Math.floor(time / sectionWindowSec)))].type;
-    events.forEach(e => { e.section = sectionAt(e.time); });
 
     // ---- beats[] on the musical grid, with attack info at each slot ----
     function novAt(env, timeSec) {
@@ -476,6 +475,33 @@ const AudioEngine = (() => {
       for (let f = Math.max(0, c - 2); f <= Math.min(numFrames - 1, c + 2); f++) if (env[f] > v) v = env[f];
       return v;
     }
+
+    // Per-event section + local VOCAL DENSITY (0..1): how much vocal/melodic
+    // energy surrounds this hit, smoothed over a ~1.5s window so a singing
+    // verse reads "dense" and an instrumental break reads "sparse". Level
+    // generation uses it to ramp obstacle difficulty up where the voice is
+    // busy and ease off during instrumental interludes.
+    const vocalWin = Math.max(1, Math.round(0.75 / hopTime));
+    const vocalPrefix = new Float64Array(numFrames + 1);
+    for (let i = 0; i < numFrames; i++) vocalPrefix[i + 1] = vocalPrefix[i] + midNov[i];
+    let vocalDensP95 = 0;
+    {
+      const samples = [];
+      for (const e of events) {
+        const c = Math.round(e.time / hopTime);
+        const lo = Math.max(0, c - vocalWin), hi = Math.min(numFrames, c + vocalWin + 1);
+        const dens = (vocalPrefix[hi] - vocalPrefix[lo]) / (hi - lo);
+        e._vocalDensRaw = dens;
+        samples.push(dens);
+      }
+      samples.sort((a, b) => a - b);
+      vocalDensP95 = samples.length ? (samples[Math.floor(samples.length * 0.95)] || 0) : 0;
+    }
+    events.forEach(e => {
+      e.section = sectionAt(e.time);
+      e.vocal = vocalDensP95 > 1e-9 ? clamp01(e._vocalDensRaw / vocalDensP95) : 0;
+      delete e._vocalDensRaw;
+    });
     const beats = [];
     const eventTimes = events.map(e => e.time);
     for (let tBeat = beatPhaseSec; tBeat < duration; tBeat += beatSec) {

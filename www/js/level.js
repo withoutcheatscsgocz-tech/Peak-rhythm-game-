@@ -58,18 +58,30 @@ const Level = (() => {
 
     const track = playable.map((e, i) => {
       const energy = e.strength != null ? e.strength : 0.5;
+      // Local vocal density (0..1) from analysis; older levels without it
+      // fall back to a neutral 0.5 so their charts stay unchanged.
+      const vocal = e.vocal != null ? e.vocal : 0.5;
       const section = e.section || 'chill';
       const r = rng();
-      const strongHit = energy >= 0.55;
+      // Difficulty rides BOTH onset strength and how vocally busy this moment
+      // is: a syllable-packed hook plays harder than a lone instrumental hit,
+      // and an instrumental interlude stays calm even inside a loud section.
+      const intensity = 0.45 * energy + 0.55 * vocal;
+      const strongHit = intensity >= 0.55;
+      const vocalBoost = 0.3 * vocal;   // dense vocals -> more double spikes / gaps
+      const calm = vocal < 0.25;        // instrumental interlude -> keep it simple
       let obstacleType;
       if (section === 'drop') {
-        obstacleType = r < (strongHit ? 0.65 : 0.45) ? 'doubleSpike' : (r < 0.75 ? 'gap' : 'spike');
+        const dbl = Math.min(0.85, (strongHit ? 0.55 : 0.35) + vocalBoost);
+        obstacleType = r < dbl ? 'doubleSpike' : (r < dbl + 0.2 ? 'gap' : 'spike');
       } else if (section === 'build') {
-        obstacleType = r < (strongHit ? 0.5 : 0.3) ? 'doubleSpike' : (r < 0.45 ? 'gap' : 'spike');
+        const dbl = Math.min(0.7, (strongHit ? 0.4 : 0.22) + vocalBoost);
+        obstacleType = r < dbl ? 'doubleSpike' : (r < dbl + 0.18 ? 'gap' : 'spike');
       } else {
-        obstacleType = r < (strongHit ? 0.3 : 0.12) ? 'doubleSpike' : 'spike';
+        const dbl = calm ? 0 : Math.min(0.45, (strongHit ? 0.22 : 0.08) + vocalBoost);
+        obstacleType = r < dbl ? 'doubleSpike' : 'spike';
       }
-      return { time: e.time, type: 'strong', obstacleType, energy, section, index: i };
+      return { time: e.time, type: 'strong', obstacleType, energy, vocal, section, index: i };
     });
 
     const checkpoints = buildCheckpoints(track, analysis.duration);
