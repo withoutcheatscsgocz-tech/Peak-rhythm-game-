@@ -67,6 +67,7 @@ const Storage = (() => {
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
         playerName: '', // shown on global leaderboards for shared Public Library levels
+        vocalFocus: 70, // 0-100: rhythm follows vocals/melody (100) vs drums (0)
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false },
@@ -86,6 +87,7 @@ const Storage = (() => {
       endlessLeaderboard: [], // [ {score, songsSurvived, totalTime, date} ]
       tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing} }
       songLibrary: {}, // hash -> { name, bpm, duration, intensity, analysis, levelData, addedDate }
+      myPublishedLevels: {}, // levelId -> { token, title, createdAt } - lets this device delete its own uploads
     };
   }
 
@@ -357,6 +359,26 @@ const Storage = (() => {
     }).sort((a, b) => b.addedDate - a.addedDate);
   }
 
+  // ---------------- public library: levels published by this device ----------------
+  /** Records the owner token returned by Cloud.publishLevel so this device can delete it later. */
+  function recordPublishedLevel(id, token, title) {
+    const d = load();
+    d.myPublishedLevels[id] = { token, title, createdAt: Date.now() };
+    save();
+  }
+  function getOwnerToken(id) {
+    const entry = load().myPublishedLevels[id];
+    return entry ? entry.token : null;
+  }
+  function removePublishedLevel(id) {
+    const d = load();
+    delete d.myPublishedLevels[id];
+    save();
+  }
+  function getMyPublishedLevelIds() {
+    return new Set(Object.keys(load().myPublishedLevels));
+  }
+
   // ---------------- stats ----------------
   function getStats() { return load().stats; }
 
@@ -374,6 +396,7 @@ const Storage = (() => {
     getLeaderboard, getAllPlayedSongs, getEndlessLeaderboard, addEndlessScore,
     getTunerSettings, setTunerSettings,
     getCachedSong, cacheSongAnalysis, getLibrarySongs,
+    recordPublishedLevel, getOwnerToken, removePublishedLevel, getMyPublishedLevelIds,
     getStats,
     isTutorialDone, markTutorialDone,
     SKIN_UNLOCK_ACHIEVEMENT,

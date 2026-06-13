@@ -52,6 +52,10 @@ const AudioEngine = (() => {
   // ---------------- beat tuner: bass-band sensitivity/spacing settings ----------------
   const DEFAULT_TUNER_SETTINGS = {
     bass: { sensitivity: 1.3, minSpacing: 0.25 },
+    // Global "Rhythm Focus" preference (0-100, Settings screen). Higher ->
+    // vocals/melody take the lead more readily; lower -> drums lead more
+    // often. Converted to the mid-band share threshold via vocalFocusThreshold().
+    vocalFocus: 70,
   };
 
   function defaultTunerSettings() {
@@ -65,7 +69,18 @@ const AudioEngine = (() => {
     const src = settings.bass || settings;
     if (src.sensitivity != null) out.bass.sensitivity = src.sensitivity;
     if (src.minSpacing != null) out.bass.minSpacing = src.minSpacing;
+    if (settings.vocalFocus != null) out.vocalFocus = settings.vocalFocus;
     return out;
+  }
+
+  /**
+   * Maps the "Rhythm Focus" slider (0-100, 0=drums .. 100=vocals) to the
+   * mid-band onset-energy share required for vocals to lead event detection.
+   * Lower threshold -> easier for vocals to win -> higher slider value.
+   */
+  function vocalFocusThreshold(pct) {
+    const v = pct == null ? 70 : Math.max(0, Math.min(100, pct));
+    return 0.32 - v * 0.0028; // 0 -> 0.32 (drums favored), 100 -> 0.04 (vocal-locked)
   }
 
   // ---------------- small math helpers ----------------
@@ -255,9 +270,11 @@ const AudioEngine = (() => {
     }
     // A vocal/melodic layer is "present" when the mid band carries a real
     // share of the total onset energy. Vocals have less flux than drums, so
-    // the bar is intentionally low (~12%) - we'd rather follow a quiet voice
-    // than fall back to the kick and feel disconnected from the song.
-    const hasVocals = combTotal > 1e-9 && midTotal >= 0.12 * combTotal;
+    // the bar is intentionally low by default (~12%) - we'd rather follow a
+    // quiet voice than fall back to the kick and feel disconnected from the
+    // song. The exact bar is user-tunable via the "Rhythm Focus" slider.
+    const vocalThreshold = vocalFocusThreshold(t.vocalFocus);
+    const hasVocals = combTotal > 1e-9 && midTotal >= vocalThreshold * combTotal;
     const hasDrums = combTotal > 1e-9 && lowTotal >= 0.10 * combTotal;
     let dominantBand;
     if (hasVocals) dominantBand = 'mid';
@@ -1012,7 +1029,7 @@ const AudioEngine = (() => {
     generateClickTrack,
     generateTutorialTrack,
     playBassThump,
-    normalizeTunerSettings, defaultTunerSettings,
+    normalizeTunerSettings, defaultTunerSettings, vocalFocusThreshold,
     TAP_SOUNDS, playTapSound,
   };
 })();

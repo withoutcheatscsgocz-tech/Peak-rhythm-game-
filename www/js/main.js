@@ -311,7 +311,7 @@ const App = (() => {
         analysis = cached.analysis;
         levelData = Level.generate(analysis, hash);
       } else {
-        const tunerSettings = Storage.getTunerSettings(hash);
+        const tunerSettings = tunerSettingsFor(hash);
         analysis = await AudioEngine.analyze(audioBuffer, tunerSettings, (p) => {
           $('analyze-pct').textContent = `${Math.round(p * 100)}%`;
         });
@@ -353,26 +353,44 @@ const App = (() => {
   async function openPublicLibrary() {
     UI.resetNav();
     UI.showScreen('screen-public-library');
+    const myLevelIds = Storage.getMyPublishedLevelIds();
     try {
       const levels = await Cloud.fetchPublicLevels();
-      UI.populatePublicLibrary(levels, playPublicLevel, reportPublicLevel);
+      UI.populatePublicLibrary(levels, playPublicLevel, reportPublicLevel, deletePublicLevel, myLevelIds);
     } catch (e) {
       console.error(e);
       UI.showToast('Could not load Public Library (check connection).');
-      UI.populatePublicLibrary([], playPublicLevel, reportPublicLevel);
+      UI.populatePublicLibrary([], playPublicLevel, reportPublicLevel, deletePublicLevel, myLevelIds);
     }
   }
 
-  /** Flags a shared level for moderation; the server auto-hides it past a threshold. */
-  async function reportPublicLevel(level, onDone) {
+  /** Flags a shared level for moderation (with a reason); the server auto-hides it past a threshold. */
+  async function reportPublicLevel(level, reason, onDone) {
     if (!level || !Cloud.isConfigured()) return;
     try {
-      await Cloud.reportLevel(level.id);
+      await Cloud.reportLevel(level.id, reason);
       if (onDone) onDone();
       UI.showToast('Reported. Thanks - flagged levels are hidden automatically.');
     } catch (e) {
       console.error(e);
       UI.showToast('Could not report this level (check connection).');
+    }
+  }
+
+  /** Deletes a level this device published. Requires the owner token saved at publish time. */
+  async function deletePublicLevel(level, onDone) {
+    if (!level || !Cloud.isConfigured()) return;
+    const token = Storage.getOwnerToken(level.id);
+    if (!token) return;
+    if (!window.confirm(`Delete "${level.title}" for everyone? This cannot be undone.`)) return;
+    try {
+      await Cloud.deleteLevel(level.id, token);
+      Storage.removePublishedLevel(level.id);
+      if (onDone) onDone();
+      UI.showToast('Level deleted.');
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not delete this level (check connection).');
     }
   }
 
@@ -424,7 +442,7 @@ const App = (() => {
     const title = UI.getPublishTitle() || current.songName || 'Untitled';
     UI.setPublishStatus('Publishing...');
     try {
-      await Cloud.publishLevel({
+      const result = await Cloud.publishLevel({
         title,
         fileName: current.songFile.name,
         authorName: Storage.getPlayerName(),
@@ -435,7 +453,10 @@ const App = (() => {
         levelData: current.levelData,
         audioFile: current.songFile,
       });
-      UI.setPublishStatus('Published! Other players can now find this in the Public Library.');
+      if (result && result.id && result.ownerToken) {
+        Storage.recordPublishedLevel(result.id, result.ownerToken, title);
+      }
+      UI.setPublishStatus('Published! Other players can now find this in the Public Library. You can delete it later from the Public Library list.');
     } catch (e) {
       console.error(e);
       if (e && (e.code === 'TOO_LARGE' || /413|too large/i.test(String(e.message)))) {
@@ -575,6 +596,13 @@ const App = (() => {
     UI.showScreen('screen-tuner');
   }
 
+  /** Per-song tuner settings with the global "Rhythm Focus" preference merged in. */
+  function tunerSettingsFor(hash) {
+    const settings = Storage.getTunerSettings(hash);
+    settings.vocalFocus = Storage.getSettings().vocalFocus;
+    return settings;
+  }
+
   function truncateBuffer(buffer, seconds) {
     const audioCtx = AudioEngine.getContext();
     const sampleRate = buffer.sampleRate;
@@ -589,6 +617,7 @@ const App = (() => {
   async function tunerPreview() {
     if (!current.audioBuffer) return;
     const settings = UI.readTunerSliders();
+    settings.vocalFocus = Storage.getSettings().vocalFocus;
     const snippet = truncateBuffer(current.audioBuffer, 10);
     const analysis = await AudioEngine.analyze(snippet, settings);
     UI.drawTunerCanvas(analysis);
@@ -616,6 +645,7 @@ const App = (() => {
   async function tunerRegenerate() {
     if (!current.audioBuffer) return;
     const settings = UI.readTunerSliders();
+    settings.vocalFocus = Storage.getSettings().vocalFocus;
     Storage.setTunerSettings(current.songHash, settings);
     $('analyzing-title').textContent = 'REGENERATING LEVEL...';
     $('analyze-file-name').textContent = current.songName || '';
@@ -962,7 +992,7 @@ const App = (() => {
     try {
       const audioBuffer = await AudioEngine.decodeFile(file);
       const hash = AudioEngine.hashAudioBuffer(audioBuffer);
-      const tunerSettings = Storage.getTunerSettings(hash);
+      const tunerSettings = tunerSettingsFor(hash);
       const analysis = await AudioEngine.analyze(audioBuffer, tunerSettings);
       const levelData = Level.generate(analysis, hash);
       const entry = UI.getMultiSelectFiles()[i];

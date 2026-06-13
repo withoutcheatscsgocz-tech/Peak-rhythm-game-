@@ -137,6 +137,15 @@ const UI = (() => {
   }
 
   // ---------------- settings screen ----------------
+  /** Maps the 0-100 Rhythm Focus slider to a short descriptive label. */
+  function vocalFocusLabel(v) {
+    if (v <= 10) return 'DRUMS ONLY';
+    if (v <= 35) return 'MOSTLY DRUMS';
+    if (v <= 65) return 'BALANCED';
+    if (v <= 90) return 'MOSTLY VOCALS';
+    return 'VOCALS ONLY';
+  }
+
   /** Syncs both latency sliders (settings + pause screen) to the stored value. */
   function refreshLatencySliders() {
     const v = Storage.getSettings().latencyOffset || 0;
@@ -201,6 +210,17 @@ const UI = (() => {
     playerNameInput.addEventListener('change', () => {
       Storage.setPlayerName(playerNameInput.value);
       playerNameInput.value = Storage.getPlayerName();
+    });
+
+    const vocalFocusSlider = $('vocal-focus-slider');
+    const vocalFocusValue = $('vocal-focus-value');
+    const vocalFocusInit = settings.vocalFocus != null ? settings.vocalFocus : 70;
+    vocalFocusSlider.value = vocalFocusInit;
+    vocalFocusValue.textContent = vocalFocusLabel(vocalFocusInit);
+    vocalFocusSlider.addEventListener('input', () => {
+      const v = parseInt(vocalFocusSlider.value, 10);
+      vocalFocusValue.textContent = vocalFocusLabel(v);
+      Storage.setSetting('vocalFocus', v);
     });
 
     // pause screen mirrors the latency slider
@@ -316,6 +336,23 @@ const UI = (() => {
     }
     ctx.globalAlpha = 1;
 
+    // vocal density strip - shows where the chart is following a busy vocal/
+    // melodic line (bright pink) vs an instrumental moment (dim)
+    const vocalSums = new Array(buckets).fill(0);
+    const vocalCounts = new Array(buckets).fill(0);
+    (levelData.track || []).forEach((t) => {
+      const b = clampVal(Math.floor((t.time / duration) * buckets), 0, buckets - 1);
+      vocalSums[b] += t.vocal != null ? t.vocal : 0.5;
+      vocalCounts[b]++;
+    });
+    const stripY = densityH + 4;
+    const stripH = Math.max(3, h - stripY - 1);
+    for (let i = 0; i < buckets; i++) {
+      const v = vocalCounts[i] ? vocalSums[i] / vocalCounts[i] : 0;
+      ctx.fillStyle = vocalDensityColor(v);
+      ctx.fillRect(i * bucketW, stripY, Math.max(1, bucketW - 1), stripH);
+    }
+
     // checkpoints
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 1;
@@ -330,6 +367,15 @@ const UI = (() => {
 
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
   function clampVal(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  /** Low vocal density -> dim neutral, high -> bright pink (matches the legend swatch). */
+  function vocalDensityColor(v) {
+    v = clamp01(v);
+    const r = Math.round(70 + v * (255 - 70));
+    const g = Math.round(70 + v * (90 - 70));
+    const b = Math.round(80 + v * (200 - 80));
+    return `rgba(${r},${g},${b},${(0.18 + v * 0.65).toFixed(2)})`;
+  }
 
   // ---------------- accuracy graph (complete screen) ----------------
   const ACCURACY_RANGE_MS = 300;
@@ -1032,7 +1078,14 @@ const UI = (() => {
   }
 
   // ---------------- public library (shared songs/levels) ----------------
-  function populatePublicLibrary(levels, onPlay, onReport) {
+  const REPORT_REASONS = [
+    ['spam', 'SPAM'],
+    ['inappropriate', 'INAPPROPRIATE'],
+    ['bad_sync', 'BAD SYNC'],
+    ['other', 'OTHER'],
+  ];
+
+  function populatePublicLibrary(levels, onPlay, onReport, onDelete, myLevelIds) {
     const list = $('public-library-list');
     list.innerHTML = '';
     if (!Cloud.isConfigured()) {
@@ -1067,7 +1120,20 @@ const UI = (() => {
       playBtn.textContent = 'PLAY';
       playBtn.addEventListener('click', () => onPlay(level));
       actions.appendChild(playBtn);
-      if (onReport) {
+
+      const isMine = myLevelIds && myLevelIds.has(level.id);
+      if (isMine && onDelete) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn small ghost focusable';
+        deleteBtn.title = 'Delete this level';
+        deleteBtn.setAttribute('aria-label', 'Delete this level');
+        deleteBtn.textContent = '🗑';
+        deleteBtn.addEventListener('click', () => {
+          if (deleteBtn.disabled) return;
+          onDelete(level, () => { item.remove(); });
+        });
+        actions.appendChild(deleteBtn);
+      } else if (onReport) {
         const reportBtn = document.createElement('button');
         reportBtn.className = 'btn small ghost focusable';
         reportBtn.title = 'Report this level';
@@ -1075,7 +1141,20 @@ const UI = (() => {
         reportBtn.textContent = '⚑';
         reportBtn.addEventListener('click', () => {
           if (reportBtn.disabled) return;
-          onReport(level, () => { reportBtn.disabled = true; reportBtn.textContent = '✓'; });
+          if (item.querySelector('.report-reasons')) return;
+          const reasons = document.createElement('div');
+          reasons.className = 'report-reasons';
+          REPORT_REASONS.forEach(([value, label]) => {
+            const reasonBtn = document.createElement('button');
+            reasonBtn.className = 'btn small ghost focusable';
+            reasonBtn.textContent = label;
+            reasonBtn.addEventListener('click', () => {
+              reasons.remove();
+              onReport(level, value, () => { reportBtn.disabled = true; reportBtn.textContent = '✓'; });
+            });
+            reasons.appendChild(reasonBtn);
+          });
+          item.appendChild(reasons);
         });
         actions.appendChild(reportBtn);
       }

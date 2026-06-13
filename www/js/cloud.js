@@ -41,9 +41,13 @@ const Cloud = (() => {
     return res.json();
   }
 
+  // Explicit column list - never select owner_token, it must stay secret to
+  // the publishing device or anyone could delete that level.
+  const LEVEL_PUBLIC_COLUMNS = 'id,song_hash,title,author_name,bpm,duration,level_data,storage_path,play_count,report_count,created_at';
+
   async function fetchLevel(id) {
     if (!isConfigured()) return null;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?id=eq.${encodeURIComponent(id)}&select=*`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?id=eq.${encodeURIComponent(id)}&select=${LEVEL_PUBLIC_COLUMNS}`, {
       headers: authHeaders(),
     });
     if (!res.ok) throw new Error(`fetchLevel failed: ${res.status}`);
@@ -90,15 +94,22 @@ const Cloud = (() => {
   }
 
   // ---------------- moderation ----------------
-  /** Flags a shared level; the server auto-hides it once enough players report it. */
-  async function reportLevel(levelId) {
+  /** Flags a shared level with a reason; the server auto-hides it once enough players report it. */
+  async function reportLevel(levelId, reason) {
     if (!isConfigured()) return;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/report_level`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ p_level_id: levelId }),
+      body: JSON.stringify({ p_level_id: levelId, p_reason: reason || 'other' }),
     });
     if (!res.ok) throw new Error(`reportLevel failed: ${res.status}`);
+  }
+
+  /** Random 32-char hex secret; the publishing device keeps it to delete this level later. */
+  function generateOwnerToken() {
+    const bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   }
 
   // ---------------- song audio storage ----------------
@@ -136,6 +147,7 @@ const Cloud = (() => {
     });
     if (!uploadRes.ok) throw new Error(`song upload failed: ${uploadRes.status}`);
 
+    const ownerToken = generateOwnerToken();
     const levelRes = await fetch(`${SUPABASE_URL}/rest/v1/levels`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json', Prefer: 'return=representation' }),
@@ -147,11 +159,22 @@ const Cloud = (() => {
         duration: opts.duration,
         level_data: { analysis: opts.analysis, levelData: opts.levelData },
         storage_path: storagePath,
+        owner_token: ownerToken,
       }),
     });
     if (!levelRes.ok) throw new Error(`publish failed: ${levelRes.status}`);
     const rows = await levelRes.json();
-    return rows[0];
+    return Object.assign({}, rows[0], { ownerToken });
+  }
+
+  /** Deletes a level this device published (server checks ownerToken against the row's owner_token). */
+  async function deleteLevel(id, ownerToken) {
+    if (!isConfigured()) throw new Error('Cloud not configured');
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: authHeaders({ 'x-owner-token': ownerToken || '' }),
+    });
+    if (!res.ok) throw new Error(`deleteLevel failed: ${res.status}`);
   }
 
   return {
@@ -160,6 +183,6 @@ const Cloud = (() => {
     fetchPublicLevels, fetchLevel,
     fetchLeaderboard, submitScore, incrementPlayCount,
     reportLevel,
-    downloadSong, publishLevel,
+    downloadSong, publishLevel, deleteLevel,
   };
 })();

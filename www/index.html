@@ -129,6 +129,11 @@
       <span>Player Name (shown on Public Library leaderboards)</span>
       <input type="text" id="player-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234">
     </label>
+    <label class="setting-row">
+      <span>Rhythm Focus: <b id="vocal-focus-value">BALANCED</b></span>
+      <input type="range" id="vocal-focus-slider" min="0" max="100" step="5" value="70">
+    </label>
+    <p class="setting-hint">Higher = the ball follows vocals/melody more; lower = it follows drums/bass more. New songs only - re-upload to apply to a song you already analyzed.</p>
   </div>
   <div class="panel">
     <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
@@ -177,6 +182,7 @@
     <span><i class="legend-swatch" style="background:#3cffb0"></i>BUILD</span>
     <span><i class="legend-swatch" style="background:#6a8dff"></i>CHILL</span>
     <span><i class="legend-swatch legend-cp"></i>CHECKPOINT</span>
+    <span><i class="legend-swatch" style="background:linear-gradient(90deg, rgba(70,70,80,0.5), #ff5ac8)"></i>VOCAL DENSITY</span>
   </div>
   <div class="panel" id="publish-panel">
     <label class="setting-row">
