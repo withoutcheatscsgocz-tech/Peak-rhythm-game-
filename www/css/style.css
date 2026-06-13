@@ -507,6 +507,25 @@ input[type="range"] {
 .library-list .grid-item { text-align: left; cursor: default; }
 .library-list .item-hint { letter-spacing: 0.5px; }
 
+.public-library-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.public-library-item .item-body { flex: 1; min-width: 0; }
+.public-library-item .btn { margin: 0; flex-shrink: 0; }
+
+.public-level-badge {
+  width: 100%; max-width: 420px; text-align: center;
+  font-size: 12px; letter-spacing: 2px; color: var(--accent);
+  border: 1px solid var(--accent-dim); border-radius: 8px;
+  padding: 8px; margin-bottom: 12px;
+}
+
+.publish-status {
+  font-size: 11px; letter-spacing: 1px; color: var(--accent-dim);
+  text-align: center; margin-top: 8px; min-height: 14px;
+}
+.publish-status.error { color: #ff5a3c; }
+
 /* ============================================================
    Leaderboards
    ============================================================ */

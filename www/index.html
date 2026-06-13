@@ -47,6 +47,7 @@
     </div>
     <div class="menu-row">
       <button class="btn small focusable" data-action="library">SONG LIBRARY</button>
+      <button class="btn small focusable" data-action="public-library">PUBLIC LIBRARY</button>
     </div>
     <div class="menu-row">
       <button class="btn small focusable" data-action="settings">SETTINGS</button>
@@ -124,6 +125,10 @@
         <option value="off">OFF</option>
       </select>
     </label>
+    <label class="setting-row">
+      <span>Player Name (shown on Public Library leaderboards)</span>
+      <input type="text" id="player-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234">
+    </label>
   </div>
   <div class="panel">
     <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
@@ -162,6 +167,7 @@
     <div class="result-row"><span>BEATS</span><b id="result-beats">-</b></div>
     <div class="result-row"><span>INTENSITY</span><b id="result-intensity">-</b></div>
   </div>
+  <div id="result-public-badge" class="public-level-badge hidden"></div>
   <div id="result-weak-warning" class="weak-beat-warning hidden">
     Weak beat detected — this song may not play well. Try the BEAT TUNER to adjust detection.
   </div>
@@ -172,8 +178,18 @@
     <span><i class="legend-swatch" style="background:#6a8dff"></i>CHILL</span>
     <span><i class="legend-swatch legend-cp"></i>CHECKPOINT</span>
   </div>
+  <div class="panel" id="publish-panel">
+    <label class="setting-row">
+      <span>Publish this song + level so other players can play it on the Public Library leaderboard</span>
+      <input type="text" id="publish-title-input" class="text-input" maxlength="40" placeholder="LEVEL TITLE">
+    </label>
+    <div class="menu-row">
+      <button class="btn ghost focusable" data-action="publish-level" id="publish-btn">PUBLISH TO PUBLIC LIBRARY</button>
+    </div>
+    <div class="publish-status" id="publish-status"></div>
+  </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="beat-tuner">BEAT TUNER</button>
+    <button class="btn focusable" data-action="beat-tuner" id="result-tuner-btn">BEAT TUNER</button>
     <button class="btn focusable" data-action="to-modifiers">CONTINUE</button>
   </div>
   <button class="btn ghost focusable" data-action="back">BACK</button>
@@ -297,6 +313,10 @@
   </div>
   <canvas id="accuracy-graph" class="accuracy-graph hidden"></canvas>
   <div class="leaderboard-placement hidden" id="placement-banner"></div>
+  <div class="panel scroll-panel hidden" id="global-leaderboard-panel">
+    <h3>GLOBAL LEADERBOARD</h3>
+    <div id="global-leaderboard-list"></div>
+  </div>
   <div class="menu-row">
     <button class="btn focusable" data-action="share-card">SHARE SCORE CARD</button>
     <button class="btn focusable" data-action="get-challenge">CHALLENGE</button>
@@ -367,6 +387,14 @@
   <button class="btn ghost focusable" data-action="back">BACK</button>
 </div>
 
+<!-- ====================== PUBLIC LIBRARY ====================== -->
+<div id="screen-public-library" class="screen">
+  <h2>PUBLIC LIBRARY</h2>
+  <p class="library-hint">Songs and levels published by other players. Tap PLAY to download one and play it - your score goes on its global leaderboard.</p>
+  <div id="public-library-list" class="grid-list library-list scroll-panel"></div>
+  <button class="btn ghost focusable" data-action="back">BACK</button>
+</div>
+
 <!-- ====================== CHALLENGE CODE ENTRY ====================== -->
 <div id="screen-challenge-enter" class="screen">
   <h2>ENTER CHALLENGE CODE</h2>
@@ -422,6 +450,7 @@
 <script src="js/vendor/capacitor-filesystem.js"></script>
 <script src="js/vendor/capacitor-share.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/haptics.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/level.js"></script>

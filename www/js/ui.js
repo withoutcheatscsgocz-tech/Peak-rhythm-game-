@@ -196,6 +196,13 @@ const UI = (() => {
       Storage.setSetting('rhythmGuide', rhythmGuideSelect.value);
     });
 
+    const playerNameInput = $('player-name-input');
+    playerNameInput.value = Storage.getPlayerName();
+    playerNameInput.addEventListener('change', () => {
+      Storage.setPlayerName(playerNameInput.value);
+      playerNameInput.value = Storage.getPlayerName();
+    });
+
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');
@@ -216,7 +223,7 @@ const UI = (() => {
   }
 
   // ---------------- analysis result ----------------
-  function populateResult(songName, analysis) {
+  function populateResult(songName, analysis, publicInfo) {
     $('result-name').textContent = songName || '-';
     $('result-bpm').textContent = analysis.bpm;
     const mins = Math.floor(analysis.duration / 60);
@@ -234,6 +241,33 @@ const UI = (() => {
       ? (eventsPerSec < 0.5 || ((analysis.confidence || 0) < 0.15 && (analysis.gridStability || 0) < 0.4))
       : ((analysis.confidence == null) ? false : analysis.confidence < 0.5);
     weakWarning.classList.toggle('hidden', !weak);
+
+    const badge = $('result-public-badge');
+    const publishPanel = $('publish-panel');
+    const tunerBtn = $('result-tuner-btn');
+    if (publicInfo) {
+      badge.textContent = `PUBLIC LEVEL · BY ${publicInfo.author || 'UNKNOWN'}`;
+      badge.classList.remove('hidden');
+      publishPanel.classList.add('hidden');
+      tunerBtn.classList.add('hidden');
+    } else {
+      badge.classList.add('hidden');
+      publishPanel.classList.remove('hidden');
+      tunerBtn.classList.remove('hidden');
+      const titleInput = $('publish-title-input');
+      titleInput.value = (songName || '').replace(/\.[^/.]+$/, '').slice(0, 40);
+      setPublishStatus('');
+    }
+  }
+
+  function getPublishTitle() {
+    return ($('publish-title-input').value || '').trim();
+  }
+
+  function setPublishStatus(text, isError) {
+    const el = $('publish-status');
+    el.textContent = text || '';
+    el.classList.toggle('error', !!isError);
   }
 
   // ---------------- song map preview (minimap of the generated level) ----------------
@@ -691,6 +725,34 @@ const UI = (() => {
     } else {
       placement.classList.add('hidden');
     }
+
+    hideGlobalLeaderboard();
+  }
+
+  // ---------------- global leaderboard (public library levels) ----------------
+  function showGlobalLeaderboard(entries, playerName) {
+    const panel = $('global-leaderboard-panel');
+    const list = $('global-leaderboard-list');
+    list.innerHTML = '';
+    if (!entries || !entries.length) {
+      panel.classList.add('hidden');
+      return;
+    }
+    entries.forEach((e, i) => {
+      const row = document.createElement('div'); row.className = 'leaderboard-entry';
+      if (e.player_name === playerName) row.style.color = 'var(--accent)';
+      const rank = document.createElement('span'); rank.className = 'rank'; rank.textContent = `#${i + 1}`;
+      const info = document.createElement('span');
+      info.textContent = `${e.player_name}  •  ${Math.round(e.score)} pts  •  ${e.max_combo || 0}x`;
+      row.appendChild(rank); row.appendChild(info);
+      list.appendChild(row);
+    });
+    panel.classList.remove('hidden');
+  }
+
+  function hideGlobalLeaderboard() {
+    $('global-leaderboard-panel').classList.add('hidden');
+    $('global-leaderboard-list').innerHTML = '';
   }
 
   function populateEndlessComplete(result, rank) {
@@ -969,6 +1031,44 @@ const UI = (() => {
     });
   }
 
+  // ---------------- public library (shared songs/levels) ----------------
+  function populatePublicLibrary(levels, onPlay) {
+    const list = $('public-library-list');
+    list.innerHTML = '';
+    if (!Cloud.isConfigured()) {
+      const empty = document.createElement('div');
+      empty.className = 'panel';
+      empty.textContent = 'Public Library is not configured for this build yet.';
+      list.appendChild(empty);
+      return;
+    }
+    if (!levels || !levels.length) {
+      const empty = document.createElement('div');
+      empty.className = 'panel';
+      empty.textContent = 'No songs published yet. Be the first - upload a song, then PUBLISH TO PUBLIC LIBRARY!';
+      list.appendChild(empty);
+      return;
+    }
+    levels.forEach(level => {
+      const item = document.createElement('div');
+      item.className = 'grid-item public-library-item';
+      const body = document.createElement('div'); body.className = 'item-body';
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = level.title;
+      const hint = document.createElement('div'); hint.className = 'item-hint';
+      const mins = Math.floor((level.duration || 0) / 60);
+      const secs = Math.floor((level.duration || 0) % 60);
+      const lengthStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      hint.textContent = `BY ${level.author_name}  •  BPM ${Math.round(level.bpm || 0)}  •  ${lengthStr}  •  ${level.play_count || 0} PLAYS`;
+      body.appendChild(name); body.appendChild(hint);
+      const playBtn = document.createElement('button');
+      playBtn.className = 'btn small focusable';
+      playBtn.textContent = 'PLAY';
+      playBtn.addEventListener('click', () => onPlay(level));
+      item.appendChild(body); item.appendChild(playBtn);
+      list.appendChild(item);
+    });
+  }
+
   // ---------------- challenge codes ----------------
   function setChallengeMessage(text, isError) {
     const el = $('challenge-msg');
@@ -1079,7 +1179,7 @@ const UI = (() => {
     logDebugError, hideDebugOverlay, clearDebugLog,
     applyTheme,
     setHeartbeatRate,
-    populateResult,
+    populateResult, getPublishTitle, setPublishStatus,
     populateSongMap,
     initTuner, readTunerSliders, drawTunerCanvas,
     populateModifiers, getActiveModifiers, setActiveModifiers,
@@ -1089,9 +1189,10 @@ const UI = (() => {
     setReplayToastVisible, setPlayerBanner, hidePlayerBanner, setEndlessBanner, hideEndlessBanner,
     resetPractice, updatePracticeFeedback, updatePracticeProgress,
     populateComplete, populateEndlessComplete, populateMultiplayerComplete,
+    showGlobalLeaderboard, hideGlobalLeaderboard,
     populateThemesSkins, populateAchievements, populateStats, populateLeaderboards,
     leaderboardsGoBack,
-    populateLibrary,
+    populateLibrary, populatePublicLibrary,
     setChallengeMessage, getChallengeCodeInput, clearChallengeInput,
     initMultiSelect, addMultiSelectFile, setMultiSelectFileStatus, getMultiSelectFiles,
     initPassSetup, addPassPlayer, getPassPlayers,

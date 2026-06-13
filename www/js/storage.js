@@ -66,6 +66,7 @@ const Storage = (() => {
         debugLog: false,
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
+        playerName: '', // shown on global leaderboards for shared Public Library levels
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false },
@@ -131,6 +132,19 @@ const Storage = (() => {
   function setSetting(key, value) {
     load().settings[key] = value;
     save();
+  }
+
+  // ---------------- player identity (Public Library leaderboards) ----------------
+  function getPlayerName() {
+    const s = load().settings;
+    if (!s.playerName) {
+      s.playerName = 'PLAYER' + Math.floor(1000 + Math.random() * 9000);
+      save();
+    }
+    return s.playerName;
+  }
+  function setPlayerName(name) {
+    setSetting('playerName', (name || '').trim().slice(0, 20));
   }
 
   // ---------------- themes / skins ----------------
@@ -353,6 +367,7 @@ const Storage = (() => {
   return {
     load, save,
     getSettings, setSetting,
+    getPlayerName, setPlayerName,
     getThemeDefs, getSkinDefs, isThemeUnlocked, isSkinUnlocked, unlockTheme, allThemesUnlocked,
     getAchievementDefs, isAchievementUnlocked, unlockAchievement, getAchievementProgress,
     recordRunResult,

@@ -12,6 +12,8 @@ const App = (() => {
     mode: 'file', // file | endless | multiplayer | playlist | challenge
     audioBuffer: null, analysis: null, levelData: null,
     songHash: null, songName: null,
+    songFile: null, // original File, kept around so it can be published to the Public Library
+    publicLevel: null, // { id, title, author } when playing a downloaded Public Library level
   };
   let lastResult = null;
   let lastRankInfo = null;
@@ -38,7 +40,7 @@ const App = (() => {
   }
 
   function resetSessionState() {
-    current = { mode: 'file', audioBuffer: null, analysis: null, levelData: null, songHash: null, songName: null };
+    current = { mode: 'file', audioBuffer: null, analysis: null, levelData: null, songHash: null, songName: null, songFile: null, publicLevel: null };
     lastResult = null;
     lastRankInfo = null;
     lastReplayBlob = null;
@@ -124,6 +126,9 @@ const App = (() => {
         UI.populateLibrary();
         UI.showScreen('screen-library');
         break;
+      case 'public-library':
+        openPublicLibrary();
+        break;
       case 'themes':
         UI.populateThemesSkins();
         UI.showScreen('screen-themes');
@@ -161,6 +166,9 @@ const App = (() => {
       // ---------------- result / tuner / modifiers ----------------
       case 'beat-tuner':
         enterTuner();
+        break;
+      case 'publish-level':
+        handlePublishLevel();
         break;
       case 'to-modifiers':
         UI.populateModifiers();
@@ -315,6 +323,8 @@ const App = (() => {
       current.levelData = levelData;
       current.songHash = hash;
       current.songName = file.name;
+      current.songFile = file;
+      current.publicLevel = null;
 
       if (current.mode === 'challenge') {
         handleChallengeSongLoaded();
@@ -326,7 +336,7 @@ const App = (() => {
         UI.showScreen('screen-modifiers', false);
         return;
       }
-      UI.populateResult(file.name, analysis);
+      UI.populateResult(file.name, analysis, null);
       UI.resetNav();
       UI.showScreen('screen-result', false);
       UI.populateSongMap(levelData);
@@ -336,6 +346,103 @@ const App = (() => {
       UI.resetNav();
       UI.showScreen('screen-start', false);
       resetSessionState();
+    }
+  }
+
+  // ---------------- public library (shared songs/levels) ----------------
+  async function openPublicLibrary() {
+    UI.resetNav();
+    UI.showScreen('screen-public-library');
+    try {
+      const levels = await Cloud.fetchPublicLevels();
+      UI.populatePublicLibrary(levels, playPublicLevel);
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not load Public Library (check connection).');
+      UI.populatePublicLibrary([], playPublicLevel);
+    }
+  }
+
+  async function playPublicLevel(level) {
+    $('analyzing-title').textContent = 'DOWNLOADING SONG...';
+    $('analyze-file-name').textContent = level.title;
+    $('analyze-pct').textContent = '';
+    UI.showScreen('screen-analyzing', false);
+    try {
+      const full = await Cloud.fetchLevel(level.id);
+      if (!full || !full.level_data || !full.level_data.levelData || !full.level_data.analysis) {
+        throw new Error('Level data missing');
+      }
+      const arrayBuffer = await Cloud.downloadSong(full.storage_path);
+      const audioBuffer = await AudioEngine.decodeFile(new Blob([arrayBuffer]));
+
+      current.mode = 'file';
+      current.audioBuffer = audioBuffer;
+      current.analysis = full.level_data.analysis;
+      current.levelData = full.level_data.levelData;
+      current.songHash = full.song_hash;
+      current.songName = full.title;
+      current.songFile = null;
+      current.publicLevel = { id: full.id, title: full.title, author: full.author_name };
+
+      UI.populateResult(full.title, current.analysis, { author: full.author_name });
+      UI.resetNav();
+      UI.showScreen('screen-result', false);
+      UI.populateSongMap(current.levelData);
+    } catch (e) {
+      console.error(e);
+      UI.showToast('Could not download this level.');
+      UI.resetNav();
+      UI.showScreen('screen-public-library', false);
+    }
+  }
+
+  async function handlePublishLevel() {
+    if (!current.audioBuffer || !current.songFile || !current.levelData) return;
+    if (!Cloud.isConfigured()) {
+      UI.setPublishStatus('Public Library is not configured for this build yet.', true);
+      return;
+    }
+    const title = UI.getPublishTitle() || current.songName || 'Untitled';
+    UI.setPublishStatus('Publishing...');
+    try {
+      await Cloud.publishLevel({
+        title,
+        fileName: current.songFile.name,
+        authorName: Storage.getPlayerName(),
+        songHash: current.songHash,
+        bpm: current.levelData.bpm,
+        duration: current.levelData.duration,
+        analysis: current.analysis,
+        levelData: current.levelData,
+        audioFile: current.songFile,
+      });
+      UI.setPublishStatus('Published! Other players can now find this in the Public Library.');
+    } catch (e) {
+      console.error(e);
+      UI.setPublishStatus('Could not publish (check connection).', true);
+    }
+  }
+
+  /** Submits this run's score to the level's global leaderboard, then refreshes it. */
+  async function submitGlobalScore(result) {
+    const level = current.publicLevel;
+    if (!level || !Cloud.isConfigured()) return;
+    const perfectRate = result.totalBeats ? (result.perfectCount / result.totalBeats) : 0;
+    try {
+      await Cloud.submitScore({
+        levelId: level.id,
+        playerName: Storage.getPlayerName(),
+        score: result.score,
+        maxCombo: result.maxCombo,
+        perfectRate,
+        modifiers: result.modifiers || [],
+      });
+      await Cloud.incrementPlayCount(level.id);
+      const entries = await Cloud.fetchLeaderboard(level.id);
+      UI.showGlobalLeaderboard(entries, Storage.getPlayerName());
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -497,7 +604,7 @@ const App = (() => {
     current.analysis = analysis;
     current.levelData = Level.generate(analysis, current.songHash);
     Storage.cacheSongAnalysis(current.songHash, current.songName, analysis, current.levelData);
-    UI.populateResult(current.songName, analysis);
+    UI.populateResult(current.songName, analysis, null);
     UI.resetNav();
     UI.showScreen('screen-result', false);
     UI.populateSongMap(current.levelData);
@@ -616,6 +723,7 @@ const App = (() => {
       const def = Storage.getSkinDefs().find(d => d.id === id);
       UI.showToast(`SKIN UNLOCKED: ${def ? def.name : id.toUpperCase()}`);
     });
+    if (result.finished && current.publicLevel) submitGlobalScore(result);
   }
 
   // ---------------- practice mode ----------------
