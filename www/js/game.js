@@ -477,6 +477,16 @@ const Game = (() => {
     return session.startAudioTime + (t - session.startOffset) / session.playbackRate;
   }
 
+  /**
+   * Time between a sample leaving the audio graph and it actually reaching
+   * the speakers/headphones. On phones (especially Bluetooth) this can be
+   * tens to hundreds of ms, which otherwise makes taps that are perfectly in
+   * time with the audio the player hears get judged as "late".
+   */
+  function getOutputLatencySec() {
+    return (audioCtx && (audioCtx.outputLatency || audioCtx.baseLatency)) || 0;
+  }
+
   // ---------------- score popups ----------------
   const popups = [];
   function addPopup(text, x, y, color) {
@@ -871,7 +881,7 @@ const Game = (() => {
     if (!running || isPaused || !session || session.completing) return;
     const realNow = audioCtx.currentTime;
     const songTime = (realNow < session.hitStopUntilReal) ? session.frozenSongTime : computeSongTime(realNow);
-    const latency = (Storage.getSettings().latencyOffset || 0) / 1000;
+    const latency = (Storage.getSettings().latencyOffset || 0) / 1000 - getOutputLatencySec();
     const adjusted = songTime + latency;
 
     if (session.mode === 'synctest') recordSyncOffsetSample(songTime);
@@ -905,18 +915,20 @@ const Game = (() => {
   /**
    * SYNC TEST calibration: records how far (in ms) this tap landed from the
    * nearest click (every 0.5s in the 120 BPM track), *without* the current
-   * latencyOffset applied, so the test produces a usable measurement even
-   * when the player is currently mis-calibrated (and would otherwise only
-   * ever see MISS with no clue which way to move the slider). The 0.5s click
-   * spacing gives +-250ms of unambiguous range; the live readout uses the
-   * median, which stays close to the true offset even with the occasional
-   * sample that lands just past the +-250ms boundary and wraps to the
-   * neighbouring click.
+   * latencyOffset applied (output-latency auto-compensation is still applied,
+   * since that's not under the player's control), so the test produces a
+   * usable measurement even when the player is currently mis-calibrated (and
+   * would otherwise only ever see MISS with no clue which way to move the
+   * slider). The 0.5s click spacing gives +-250ms of unambiguous range; the
+   * live readout uses the median, which stays close to the true offset even
+   * with the occasional sample that lands just past the +-250ms boundary and
+   * wraps to the neighbouring click.
    */
   function recordSyncOffsetSample(songTime) {
     const beatInterval = (60 / ((session.levelData && session.levelData.bpm) || 120));
-    const nearest = Math.round(songTime / beatInterval) * beatInterval;
-    const offsetMs = (songTime - nearest) * 1000;
+    const adjusted = songTime - getOutputLatencySec();
+    const nearest = Math.round(adjusted / beatInterval) * beatInterval;
+    const offsetMs = (adjusted - nearest) * 1000;
     session.syncOffsets.push(offsetMs);
     const usable = session.syncOffsets.filter(v => Math.abs(v) <= 250);
     const avgMs = usable.length ? median(usable) : null;
