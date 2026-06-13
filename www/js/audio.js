@@ -132,9 +132,11 @@ const AudioEngine = (() => {
    *  1. BAND NOVELTY: spectral-flux onset envelopes for low (kick/808),
    *     mid (vocals/melodic) and high (snare/hats) bands at a ~11.6ms hop,
    *     locally mean-subtracted so only real attacks survive.
-   *  2. DOMINANT MIX: drums lead whenever the low band carries real onset
-   *     energy (nearly all music); otherwise the busiest band leads (vocal
-   *     or percussion-only material). Gameplay events come from this mix.
+   *  2. DOMINANT MIX: VOCALS lead whenever the mid band carries a real
+   *     vocal/melodic layer (most songs); drums (low) lead only on
+   *     instrumental tracks; high leads on sparse percussion-only material.
+   *     The player follows the singer, so gameplay events come from the
+   *     vocal line first, with kick/hat assisting lightly underneath.
    *  3. EVENTS: every clear onset peak becomes a gameplay event at its TRUE
    *     detected time (latency-calibrated on synthetic clicks). Obstacles
    *     are placed ONLY on events - the ball bounces exactly on audible
@@ -239,21 +241,40 @@ const AudioEngine = (() => {
     const combNov = new Float64Array(numFrames);
     for (let i = 0; i < numFrames; i++) combNov[i] = lowNov[i] + 0.8 * midNov[i] + 0.6 * highNov[i];
 
-    // ---- 2. dominant mix: drums lead if the low band has real onsets ----
+    // ---- 2. dominant mix: VOCALS lead whenever the song actually sings ----
+    // The player's eye and ear follow the singer, so the ball should bounce
+    // on the VOCAL/melodic line first (mid band). Priority order:
+    //   1. mid  (vocals / lead melody)  - whenever a real vocal layer exists
+    //   2. low  (kick / 808 / bass)     - instrumental, drum-driven tracks
+    //   3. high (snare / hats)          - sparse, bass-less / percussion-only
+    // The chosen band LEADS event detection; the others only ASSIST (kept
+    // light so the lead truly drives the chart instead of the kick taking over).
     let lowTotal = 0, midTotal = 0, highTotal = 0, combTotal = 0;
     for (let i = 0; i < numFrames; i++) {
       lowTotal += lowNov[i]; midTotal += midNov[i]; highTotal += highNov[i]; combTotal += combNov[i];
     }
-    let dominantBand = 'low';
-    if (combTotal > 1e-9 && lowTotal < 0.18 * combTotal) {
-      dominantBand = midTotal >= highTotal ? 'mid' : 'high';
-    }
+    // A vocal/melodic layer is "present" when the mid band carries a real
+    // share of the total onset energy. Vocals have less flux than drums, so
+    // the bar is intentionally low (~12%) - we'd rather follow a quiet voice
+    // than fall back to the kick and feel disconnected from the song.
+    const hasVocals = combTotal > 1e-9 && midTotal >= 0.12 * combTotal;
+    const hasDrums = combTotal > 1e-9 && lowTotal >= 0.10 * combTotal;
+    let dominantBand;
+    if (hasVocals) dominantBand = 'mid';
+    else if (hasDrums) dominantBand = 'low';
+    else dominantBand = highTotal >= lowTotal ? 'high' : 'low';
+
     const domNov = dominantBand === 'low' ? lowNov : (dominantBand === 'mid' ? midNov : highNov);
     const gameNov = new Float64Array(numFrames);
     for (let i = 0; i < numFrames; i++) {
-      const assist = dominantBand === 'low'
-        ? 0.55 * highNov[i] + 0.3 * midNov[i]
-        : (dominantBand === 'mid' ? 0.5 * lowNov[i] + 0.3 * highNov[i] : 0.5 * lowNov[i] + 0.3 * midNov[i]);
+      // Assist weights: when vocals lead, keep the kick/hat support light so
+      // syllable onsets stay the peaks; when drums lead, lean on hats + a
+      // touch of vocal so melodic stabs still register.
+      const assist = dominantBand === 'mid'
+        ? 0.32 * lowNov[i] + 0.22 * highNov[i]
+        : (dominantBand === 'low'
+            ? 0.5 * highNov[i] + 0.35 * midNov[i]
+            : 0.45 * lowNov[i] + 0.35 * midNov[i]);
       gameNov[i] = domNov[i] + assist;
     }
 
