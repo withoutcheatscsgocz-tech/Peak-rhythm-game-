@@ -52,7 +52,6 @@ const Storage = (() => {
         replayEnabled: detectLowEnd() ? false : false, // default off per spec
         theme: 'default',
         skin: 'classic',
-        listenEnabled: false,
         debugLog: false,
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat

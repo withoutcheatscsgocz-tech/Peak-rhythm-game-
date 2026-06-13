@@ -25,7 +25,6 @@
 
 <!-- ====================== START SCREEN ====================== -->
 <div id="screen-start" class="screen active">
-  <div class="bg-spectrum-ring" id="spectrum-ring"></div>
   <div class="logo-wrap">
     <div class="logo" id="logo">ONE DOT</div>
     <div class="subtitle">a rhythm game for your ears</div>
@@ -35,7 +34,6 @@
     <button class="btn focusable" data-action="tutorial" id="tutorial-btn">HOW TO PLAY</button>
     <button class="btn focusable" data-action="upload-song">UPLOAD SONG</button>
     <button class="btn focusable" data-action="upload-playlist">UPLOAD PLAYLIST</button>
-    <button class="btn focusable" data-action="mic-mode">MIC MODE</button>
     <button class="btn focusable" data-action="endless-mode">ENDLESS</button>
     <button class="btn focusable" data-action="pass-play">PASS &amp; PLAY</button>
     <button class="btn focusable" data-action="enter-challenge">ENTER CHALLENGE CODE</button>
@@ -52,7 +50,6 @@
     </div>
     <div class="menu-row">
       <button class="btn small focusable" data-action="settings">SETTINGS</button>
-      <button class="btn small focusable toggle-btn" id="listen-toggle" data-action="toggle-listen">&#127908; LISTEN</button>
     </div>
   </div>
   <input type="file" id="file-input-song" accept="audio/*" style="display:none">
@@ -72,9 +69,7 @@
       <li><b>Your own recordings</b> &mdash; humming, beatboxing, or band recordings make for
           fun, unpredictable levels!</li>
     </ul>
-    <p>Once you have a file on your device, just tap <b>UPLOAD SONG</b> and pick it. Or skip the
-       file entirely and use <b>MIC MODE</b> to let the game listen to whatever is playing
-       around you.</p>
+    <p>Once you have a file on your device, just tap <b>UPLOAD SONG</b> and pick it.</p>
   </div>
   <button class="btn focusable" data-action="back">BACK</button>
 </div>
@@ -209,20 +204,6 @@
     <button class="btn focusable" data-action="tuner-regenerate">REGENERATE LEVEL</button>
   </div>
   <button class="btn ghost focusable" data-action="back">BACK</button>
-</div>
-
-<!-- ====================== MIC CALIBRATION ====================== -->
-<div id="screen-mic-calibration" class="screen">
-  <h2 id="mic-cal-title">LISTENING...</h2>
-  <canvas id="mic-visualizer" class="tuner-canvas"></canvas>
-  <div class="mic-status" id="mic-status">Make sure music is playing nearby</div>
-  <div class="mic-permission-msg hidden" id="mic-permission-msg">
-    <p>Microphone access needed to use Mic Mode.</p>
-    <p>Please allow microphone permission and try again.</p>
-    <button class="btn focusable" data-action="mic-retry">TRY AGAIN</button>
-  </div>
-  <div class="countdown hidden" id="mic-countdown"></div>
-  <button class="btn ghost focusable" data-action="back">CANCEL</button>
 </div>
 
 <!-- ====================== MODIFIERS ====================== -->

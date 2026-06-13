@@ -417,44 +417,6 @@ const UI = (() => {
     ctx.stroke();
   }
 
-  // ---------------- mic calibration ----------------
-  function setMicStatus(text) { $('mic-status').textContent = text; }
-  function setMicTitle(text) { $('mic-cal-title').textContent = text; }
-  function showMicPermissionError(show) {
-    $('mic-permission-msg').classList.toggle('hidden', !show);
-  }
-  function setMicCountdown(text) {
-    const el = $('mic-countdown');
-    if (text === null || text === undefined) {
-      el.classList.add('hidden');
-      return;
-    }
-    el.classList.remove('hidden');
-    el.textContent = text;
-  }
-  function drawMicVisualizer(dataArray) {
-    const canvas = $('mic-visualizer');
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = canvas.clientWidth || 320, h = canvas.clientHeight || 120;
-    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    if (!dataArray) return;
-    const bars = 48;
-    const step = Math.floor(dataArray.length / bars);
-    const barW = w / bars;
-    const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#fff';
-    ctx.fillStyle = accent;
-    for (let i = 0; i < bars; i++) {
-      let sum = 0;
-      for (let j = 0; j < step; j++) sum += dataArray[i * step + j] || 0;
-      const v = (sum / step) / 255;
-      const barH = v * h;
-      ctx.fillRect(i * barW + 1, h - barH, barW - 2, barH);
-    }
-  }
-
   // ---------------- modifiers ----------------
   function populateModifiers(onChange) {
     activeModifiers = new Set();
@@ -1107,7 +1069,6 @@ const UI = (() => {
     applySavedAppearance();
     initSettingsScreen();
     bindTunerSliders();
-    if (Storage.getSettings().listenEnabled) $('listen-toggle').classList.add('active');
   }
 
   return {
@@ -1120,7 +1081,6 @@ const UI = (() => {
     populateResult,
     populateSongMap,
     initTuner, readTunerSliders, drawTunerCanvas,
-    setMicStatus, setMicTitle, showMicPermissionError, setMicCountdown, drawMicVisualizer,
     populateModifiers, getActiveModifiers, setActiveModifiers,
     setCountdownNumber,
     showHUD, hideHUD, setupProgressBar, updateHUD, flashCombo,

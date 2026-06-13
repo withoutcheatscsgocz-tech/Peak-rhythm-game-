@@ -92,15 +92,6 @@ h3 {
    ============================================================ */
 #screen-start { justify-content: center; }
 
-.bg-spectrum-ring {
-  position: absolute;
-  width: 280px; height: 280px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  pointer-events: none;
-  transition: border-color 0.3s;
-}
-
 .logo-wrap { text-align: center; margin-bottom: 28px; z-index: 2; }
 .logo {
   font-size: 56px;
@@ -123,7 +114,7 @@ h3 {
 
 /* ============================================================
    Heartbeat idle dot - pulses at BPM-scaled rate when paused
-   or during LISTEN mode (PAUSED screen + start menu)
+   (PAUSED screen + start menu)
    ============================================================ */
 .heartbeat-dot {
   width: 16px; height: 16px;
@@ -165,7 +156,6 @@ h3 {
 .btn.small { font-size: 12px; padding: 12px 8px; }
 .btn.big { font-size: 18px; padding: 22px 28px; }
 .btn.ghost { border-color: var(--accent-dim); color: var(--accent-dim); text-shadow: none; margin-top: 14px; }
-.btn.toggle-btn.active { background: var(--accent); color: #000; }
 .btn.focused, .btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent), 0 0 16px var(--accent);
@@ -465,15 +455,6 @@ input[type="range"] {
 }
 .tuner-band-bass .tuner-band-label { color: #ff785a; text-shadow: 0 0 6px #ff785a; }
 .tuner-band-bass .tuner-band-header .btn { border-color: #ff785a; color: #ff785a; }
-
-/* ============================================================
-   Mic calibration
-   ============================================================ */
-#screen-mic-calibration { justify-content: center; align-items: center; gap: 16px; }
-.mic-status { font-size: 12px; letter-spacing: 2px; color: var(--accent-dim); text-align: center; }
-.mic-permission-msg { text-align: center; font-size: 13px; line-height: 1.6; }
-.countdown.hidden { display: none; }
-#mic-countdown { font-size: 100px; font-weight: bold; text-shadow: 0 0 30px var(--accent); }
 
 /* ============================================================
    Grid lists (themes/skins/achievements/leaderboards)

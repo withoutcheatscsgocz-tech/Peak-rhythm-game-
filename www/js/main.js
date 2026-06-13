@@ -9,7 +9,7 @@ const App = (() => {
 
   // ---------------- state ----------------
   let current = {
-    mode: 'file', // file | mic | endless | multiplayer | playlist | challenge
+    mode: 'file', // file | endless | multiplayer | playlist | challenge
     audioBuffer: null, analysis: null, levelData: null,
     songHash: null, songName: null,
   };
@@ -21,10 +21,6 @@ const App = (() => {
   let playlist = null;
   let multiplayer = null;
   let challenge = null;
-
-  let micCalRaf = null;
-  let listenRaf = null;
-  let listenActive = false;
 
   // ---------------- helpers ----------------
   function delay(ms) {
@@ -60,7 +56,7 @@ const App = (() => {
     bindErrorHandlers();
     Game.init($('game-canvas'), $('fx-canvas'));
     UI.init();
-    UI.setHeartbeatRate('menu-heartbeat-dot', IDLE_HEARTBEAT_INTERVAL);
+    UI.setHeartbeatRate('menu-heartbeat-dot', 1);
     bindGameCallbacks();
     bindGlobalActions();
     bindFileInputs();
@@ -68,12 +64,6 @@ const App = (() => {
     bindVisibility();
     bindGamepad();
     if (!Storage.isTutorialDone()) $('tutorial-btn').classList.add('attention');
-    if (Storage.getSettings().listenEnabled) {
-      startListenMode().catch(() => {
-        Storage.setSetting('listenEnabled', false);
-        $('listen-toggle').classList.remove('active');
-      });
-    }
   }
 
   // ---------------- global error capture (DEBUG LOG) ----------------
@@ -107,9 +97,6 @@ const App = (() => {
         break;
       case 'upload-playlist':
         enterPlaylistSetup();
-        break;
-      case 'mic-mode':
-        enterMicMode();
         break;
       case 'endless-mode':
         enterEndlessSetup();
@@ -149,9 +136,6 @@ const App = (() => {
         break;
       case 'tutorial':
         startTutorial();
-        break;
-      case 'toggle-listen':
-        toggleListenMode();
         break;
       case 'debug-log-clear':
         UI.clearDebugLog();
@@ -193,11 +177,6 @@ const App = (() => {
         break;
       case 'start-game':
         proceedFromModifiers();
-        break;
-
-      // ---------------- mic mode ----------------
-      case 'mic-retry':
-        startMicCalibration();
         break;
 
       // ---------------- pass & play ----------------
@@ -276,10 +255,6 @@ const App = (() => {
   function handleBack() {
     const screen = UI.getCurrentScreen();
     if (screen === 'screen-leaderboards' && UI.leaderboardsGoBack()) return;
-    if (screen === 'screen-mic-calibration') {
-      if (micCalRaf) cancelAnimationFrame(micCalRaf);
-      MicEngine.stop();
-    }
     UI.goBack();
   }
 
@@ -669,71 +644,6 @@ const App = (() => {
     UI.resetNav();
     if (mastered) UI.showToast('SECTION MASTERED!');
     UI.showScreen('screen-complete', false);
-  }
-
-  // ============================================================
-  // Stub flows - implemented in later passes
-  // ============================================================
-
-  // ---------------- mic mode ----------------
-  function enterMicMode() {
-    if (listenActive) {
-      stopListenMode();
-      Storage.setSetting('listenEnabled', false);
-      $('listen-toggle').classList.remove('active');
-    }
-    current.mode = 'mic';
-    current.audioBuffer = null;
-    current.analysis = null;
-    current.levelData = null;
-    current.songHash = null;
-    current.songName = 'Mic Mode';
-    UI.showMicPermissionError(false);
-    UI.setMicCountdown(null);
-    UI.showScreen('screen-mic-calibration');
-    startMicCalibration();
-  }
-
-  async function startMicCalibration() {
-    UI.setMicTitle('LISTENING...');
-    UI.setMicStatus('Make sure music is playing nearby');
-    UI.showMicPermissionError(false);
-    UI.setMicCountdown(null);
-    try {
-      await MicEngine.start();
-    } catch (e) {
-      UI.showMicPermissionError(true);
-      return;
-    }
-    const calStart = performance.now();
-    const visLoop = () => {
-      UI.drawMicVisualizer(MicEngine.getFrequencyData());
-      if (performance.now() - calStart < 5000) {
-        micCalRaf = requestAnimationFrame(visLoop);
-      } else {
-        micCalRaf = null;
-        finishMicCalibration();
-      }
-    };
-    visLoop();
-  }
-
-  async function finishMicCalibration() {
-    UI.setMicTitle('GET READY');
-    UI.setMicStatus(`Detected ~${MicEngine.getBPM()} BPM`);
-    const beatInterval = MicEngine.getBeatInterval();
-    for (let i = 3; i >= 1; i--) {
-      UI.setMicCountdown(i);
-      await delay(beatInterval * 1000);
-    }
-    UI.setMicCountdown(null);
-    UI.resetNav();
-    UI.showScreen('screen-none', false);
-    enterGameplay({
-      mode: 'mic',
-      modifiers: new Set(),
-      songMeta: { name: 'Mic Mode' },
-    });
   }
 
   // ---------------- endless mode ----------------
@@ -1168,88 +1078,6 @@ const App = (() => {
     UI.setReplayToastVisible(false);
   }
 
-  // ---------------- audio reactive listen mode ----------------
-  let listenBeatFlash = 0;
-  let listenHeartbeatInterval = 1;
-  const IDLE_HEARTBEAT_INTERVAL = 1; // 60 BPM resting pulse when LISTEN mode is off
-
-  function listenLoop() {
-    if (!listenActive) return;
-    const data = MicEngine.getFrequencyData();
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) sum += data[i];
-    const level = data.length ? (sum / data.length) / 255 : 0;
-    listenBeatFlash *= 0.9;
-    const glow = Math.min(1, level * 1.5 + listenBeatFlash);
-    const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#ffffff';
-
-    const ring = $('spectrum-ring');
-    ring.style.borderColor = accent;
-    ring.style.opacity = String(0.25 + glow * 0.75);
-    ring.style.boxShadow = `0 0 ${20 + glow * 80}px ${accent}`;
-    ring.style.transform = `scale(${1 + glow * 0.25})`;
-
-    const logo = $('logo');
-    logo.style.transform = `scale(${1 + glow * 0.12})`;
-    logo.style.opacity = String(0.85 + glow * 0.15);
-
-    const beatInterval = MicEngine.getBeatInterval();
-    if (Math.abs(beatInterval - listenHeartbeatInterval) > 0.02) {
-      listenHeartbeatInterval = beatInterval;
-      UI.setHeartbeatRate('menu-heartbeat-dot', beatInterval);
-    }
-
-    listenRaf = requestAnimationFrame(listenLoop);
-  }
-
-  async function startListenMode() {
-    if (listenActive) return;
-    await MicEngine.start();
-    listenActive = true;
-    listenBeatFlash = 0;
-    listenHeartbeatInterval = 1;
-    $('logo').style.animation = 'none';
-    MicEngine.onBeat = (beat) => {
-      listenBeatFlash = beat.type === 'strong' ? 1 : 0.6;
-    };
-    listenLoop();
-  }
-
-  function stopListenMode() {
-    if (!listenActive) return;
-    listenActive = false;
-    if (listenRaf) cancelAnimationFrame(listenRaf);
-    listenRaf = null;
-    MicEngine.onBeat = null;
-    MicEngine.stop();
-    UI.setHeartbeatRate('menu-heartbeat-dot', IDLE_HEARTBEAT_INTERVAL);
-    const ring = $('spectrum-ring');
-    ring.style.borderColor = '';
-    ring.style.opacity = '';
-    ring.style.boxShadow = '';
-    ring.style.transform = '';
-    const logo = $('logo');
-    logo.style.animation = '';
-    logo.style.transform = '';
-    logo.style.opacity = '';
-  }
-
-  async function toggleListenMode() {
-    if (listenActive) {
-      stopListenMode();
-      Storage.setSetting('listenEnabled', false);
-      $('listen-toggle').classList.remove('active');
-      return;
-    }
-    try {
-      await startListenMode();
-      Storage.setSetting('listenEnabled', true);
-      $('listen-toggle').classList.add('active');
-    } catch (e) {
-      UI.showToast('Microphone access denied.');
-    }
-  }
-
   // ---------------- input handling ----------------
   function bindInput() {
     window.addEventListener('pointerdown', () => {
@@ -1288,12 +1116,6 @@ const App = (() => {
           Game.pause();
           UI.showScreen('screen-pause', false);
         }
-        if (listenActive && listenRaf) {
-          cancelAnimationFrame(listenRaf);
-          listenRaf = null;
-        }
-      } else if (listenActive && !listenRaf) {
-        listenLoop();
       }
     });
   }

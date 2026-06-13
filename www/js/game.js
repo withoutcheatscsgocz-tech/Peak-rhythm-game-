@@ -22,14 +22,12 @@ const Game = (() => {
   const ROLL_SPIKE_LIMIT = 8;
   const MAX_PARTICLES = 400;
   const POINTS = { perfectStrong: 250, goodStrong: 100 };
-  const MIC_TOLERANCE = 0.15;
 
   const SECTION_COLORS = {
     intro: { r: 106, g: 141, b: 255 },
     chill: { r: 106, g: 141, b: 255 },
     build: { r: 60, g: 255, b: 176 },
     drop: { r: 255, g: 90, b: 60 },
-    live: { r: 180, g: 180, b: 220 },
   };
 
   const MODIFIER_DEFS = [
@@ -291,7 +289,7 @@ const Game = (() => {
     else if (modifiers.has('rush')) playbackRate = 1.25;
     else if (modifiers.has('insane')) playbackRate = 1.5;
 
-    const track = opts.levelData ? opts.levelData.track.map(t => Object.assign({}, t, { hit: false, hitType: null, dissolved: false, validated: true })) : [];
+    const track = opts.levelData ? opts.levelData.track.map(t => Object.assign({}, t, { hit: false, hitType: null })) : [];
     const carry = opts.carryState || {};
 
     let initialTrackIndex = 0;
@@ -329,7 +327,6 @@ const Game = (() => {
       screenShakeMag: 0, screenShakeUntilReal: 0,
       chromaUntilReal: 0,
       ghostData: opts.ghostData || null, ghostDelta: 0,
-      micActive: opts.mode === 'mic',
       practice: opts.practice || null,
       practicePassHits: 0, practiceCleanPasses: 0,
       pauseOnCheckpoint: !!opts.pauseOnCheckpoint,
@@ -384,35 +381,12 @@ const Game = (() => {
     }
   }
 
-  function setupMicListener() {
-    MicEngine.onBeat = (onset) => {
-      if (!running || isPaused) return;
-      // validate any pending element predicted near this onset's time
-      for (let i = session.trackIndex; i < session.track.length; i++) {
-        const el = session.track[i];
-        if (!el.validated && Math.abs(el.time - onset.time) <= MIC_TOLERANCE) el.validated = true;
-      }
-      const predictedTime = onset.time + onset.predictedInterval;
-      session.track.push({
-        time: predictedTime, type: 'strong', obstacleType: 'spike',
-        energy: onset.energy, section: 'live', index: session.track.length,
-        hit: false, hitType: null, dissolved: false, validated: false,
-      });
-    };
-  }
-
   // ---------------- transport ----------------
   function start() {
-    if (session.audioBuffer) {
-      const offset = session.practice ? session.practice.loopStart : session.startOffset;
-      playback.source.start(audioCtx.currentTime, offset);
-      session.startAudioTime = audioCtx.currentTime;
-      session.startOffset = offset;
-    } else {
-      session.startAudioTime = audioCtx.currentTime;
-      session.startOffset = 0;
-      setupMicListener();
-    }
+    const offset = session.practice ? session.practice.loopStart : session.startOffset;
+    playback.source.start(audioCtx.currentTime, offset);
+    session.startAudioTime = audioCtx.currentTime;
+    session.startOffset = offset;
     session.lastRealTime = audioCtx.currentTime;
     running = true;
     isPaused = false;
@@ -430,10 +404,6 @@ const Game = (() => {
     if (!running || !isPaused) return;
     if (audioCtx) { try { audioCtx.resume(); } catch (e) {} }
     session.lastRealTime = audioCtx.currentTime;
-    if (session.micActive) {
-      const now = audioCtx.currentTime;
-      session.track = session.track.filter((t, i) => i < session.trackIndex || t.time > now - 0.5);
-    }
     isPaused = false;
   }
 
@@ -459,7 +429,6 @@ const Game = (() => {
       teardownPlaybackChain(playback);
       playback = null;
     }
-    if (session && session.micActive) MicEngine.stop();
     if (replayRecorder) { replayRecorder.stop(); replayRecorder = null; }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     if (canvas) canvas.style.filter = '';
@@ -467,7 +436,6 @@ const Game = (() => {
   }
 
   function computeSongTime(realNow) {
-    if (session.micActive) return realNow;
     if (session.practice) {
       const span = session.practice.loopEnd - session.practice.loopStart;
       const elapsed = (realNow - session.startAudioTime) * (session.playbackRate * 0.6);
@@ -579,7 +547,7 @@ const Game = (() => {
       }
     }
 
-    if (!session.micActive && !session.practice) {
+    if (!session.practice) {
       while (session.checkpointIndex + 1 < session.checkpoints.length && songTime >= session.checkpoints[session.checkpointIndex + 1]) {
         session.checkpointIndex++;
         saveCheckpointSnapshot();
@@ -606,7 +574,7 @@ const Game = (() => {
 
     if (session.screenShakeMag > 0 && realNow > session.screenShakeUntilReal) session.screenShakeMag = 0;
 
-    if (!session.micActive && !session.practice && songTime >= session.duration - 0.05 && !session.completing) {
+    if (!session.practice && songTime >= session.duration - 0.05 && !session.completing) {
       beginCompleting(realNow);
     }
 
@@ -617,12 +585,6 @@ const Game = (() => {
     const goodWindow = session.windows.good;
     while (session.trackIndex < session.track.length) {
       const el = session.track[session.trackIndex];
-
-      if (session.micActive && !el.validated && songTime > el.time + MIC_TOLERANCE) {
-        el.dissolved = true;
-        session.trackIndex++;
-        continue;
-      }
 
       if (session.modifiers.has('autoJump') && !el.hit && songTime >= el.time) {
         el.hit = true; el.hitType = 'perfect';
@@ -751,7 +713,6 @@ const Game = (() => {
       session.practicePassHits++;
       return;
     }
-    if (session.micActive) return;
 
     if (session.rollSpikesPassed >= session.rollSpikeLimit && !session.modifiers.has('noFail')) {
       if (session.mode === 'endless') {
@@ -774,7 +735,7 @@ const Game = (() => {
     session.ballState = 'bounce'; session.arcGrade = 'perfect'; session.desaturation = 0;
     session.rollSpikesPassed = 0; session.rollTimeSec = 0;
     session.track.forEach((t, i) => {
-      if (i >= snap.trackIndex) { t.hit = false; t.hitType = null; t.dissolved = false; }
+      if (i >= snap.trackIndex) { t.hit = false; t.hitType = null; }
     });
 
     teardownPlaybackChain(playback);
@@ -796,7 +757,7 @@ const Game = (() => {
       const clean = session.practicePassHits === 0;
       session.practiceCleanPasses = clean ? session.practiceCleanPasses + 1 : 0;
       session.practicePassHits = 0;
-      session.track.forEach(t => { t.hit = false; t.hitType = null; t.dissolved = false; });
+      session.track.forEach(t => { t.hit = false; t.hitType = null; });
       const idx = session.track.findIndex(t => t.time >= session.practice.loopStart);
       session.trackIndex = idx < 0 ? 0 : idx;
       session.ballState = 'bounce'; session.arcGrade = 'perfect'; session.desaturation = 0;
@@ -822,7 +783,7 @@ const Game = (() => {
 
   /** RHYTHM GUIDE: quiet tick on every grid beat, fading out as perfect rate rises. */
   function rhythmGuideActive() {
-    if (session.micActive || session.practice) return false;
+    if (session.practice) return false;
     const setting = Storage.getSettings().rhythmGuide || 'auto';
     if (setting === 'off') return false;
     if (setting === 'on') return true;
@@ -891,7 +852,7 @@ const Game = (() => {
     if (session.modifiers.has('autoJump')) return;
 
     const el = session.track[session.trackIndex];
-    if (!el || el.hit || el.dissolved) return;
+    if (!el || el.hit) return;
 
     const delta = adjusted - el.time;
     const absDelta = Math.abs(delta);
@@ -1012,8 +973,7 @@ const Game = (() => {
   const freqDataBuffer = new Uint8Array(2048);
   function getLiveBassLevel() {
     let analyser = null;
-    if (session.micActive) analyser = MicEngine.analyser;
-    else if (playback) analyser = playback.analyser;
+    if (playback) analyser = playback.analyser;
     if (!analyser) return 0;
     const bins = analyser.frequencyBinCount;
     const view = freqDataBuffer.subarray(0, bins);
@@ -1049,7 +1009,7 @@ const Game = (() => {
   }
 
   function renderTrack(songTime, secColor) {
-    const bpm = (session.levelData && session.levelData.bpm) || (session.micActive ? MicEngine.getBPM() : 120);
+    const bpm = (session.levelData && session.levelData.bpm) || 120;
     const scrollSpeed = BASE_SCROLL_SPEED * (bpm / 120);
     const startIdx = Math.max(0, session.trackIndex - 1);
     for (let i = startIdx; i < session.track.length; i++) {
@@ -1076,18 +1036,12 @@ const Game = (() => {
         continue;
       }
 
-      let alpha = 1;
-      if (el.dissolved) {
-        alpha = 1 - clamp((songTime - el.time) / MIC_TOLERANCE, 0, 1);
-        if (alpha <= 0) continue;
-      }
-
       const c = SECTION_COLORS[el.section] || secColor;
       const glow = clamp(1 - Math.abs(songTime - el.time) / 0.3, 0, 1);
 
       const spikeH = 40 + (el.energy || 0.5) * 30;
       const spikeColor = el.hitType === 'miss' ? 'rgba(255,59,59,0.7)' : `rgba(${c.r},${c.g},${c.b},${0.7 + glow * 0.3})`;
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = 1;
       ctx.fillStyle = spikeColor;
       ctx.shadowColor = `rgb(${c.r},${c.g},${c.b})`;
       ctx.shadowBlur = 8 + glow * 20;
@@ -1184,9 +1138,6 @@ const Game = (() => {
       if (!next) return;
       interval = prev ? (next.time - prev.time) : session.beatInterval;
       progress = clamp(1 - (next.time - songTime) / Math.max(0.05, interval), 0, 1);
-    } else if (session.micActive) {
-      interval = MicEngine.getBeatInterval();
-      progress = (songTime % interval) / interval;
     } else return;
 
     const maxR = DOT_RADIUS * 2.6;

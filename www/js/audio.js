@@ -1,6 +1,6 @@
 /* ============================================================
    ONE DOT - audio.js
-   Web Audio analysis engine (file mode + mic mode), reverb IR,
+   Web Audio analysis engine (file mode), reverb IR,
    tick synth, and playback chain construction.
    All gameplay timing downstream is derived from
    audioContext.currentTime - never performance.now.
@@ -967,120 +967,5 @@ const AudioEngine = (() => {
     playBassThump,
     normalizeTunerSettings, defaultTunerSettings,
     TAP_SOUNDS, playTapSound,
-  };
-})();
-
-/* ============================================================
-   MicEngine - live mic mode
-   getUserMedia + AnalyserNode realtime onset detection.
-   Continuously estimates BPM; emits onset events used by the
-   game's lookahead obstacle spawner.
-   ============================================================ */
-const MicEngine = (() => {
-  let audioCtx, analyser, source, stream;
-  let dataArray, freqBinCount;
-  let running = false;
-  let onsetCallback = null;
-  let energyHistory = [];
-  let onsetTimes = [];
-  let bpmEstimate = 120;
-  let rafId = null;
-  let permissionDenied = false;
-
-  async function start() {
-    audioCtx = AudioEngine.getContext();
-    permissionDenied = false;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-    } catch (e) {
-      permissionDenied = true;
-      throw e;
-    }
-    source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0;
-    source.connect(analyser);
-    freqBinCount = analyser.frequencyBinCount;
-    dataArray = new Uint8Array(freqBinCount);
-    energyHistory = [];
-    onsetTimes = [];
-    bpmEstimate = 120;
-    running = true;
-    loop();
-  }
-
-  function stop() {
-    running = false;
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    if (source) { try { source.disconnect(); } catch (e) {} source = null; }
-  }
-
-  function loop() {
-    if (!running) return;
-    analyser.getByteFrequencyData(dataArray);
-    const sampleRate = audioCtx.sampleRate;
-    const binHz = sampleRate / analyser.fftSize;
-    const bassLow = Math.max(1, Math.floor(60 / binHz));
-    const bassHigh = Math.min(freqBinCount - 1, Math.ceil(150 / binHz));
-
-    let bassSum = 0, totalSum = 0;
-    for (let i = 0; i < freqBinCount; i++) {
-      const v = dataArray[i] / 255;
-      totalSum += v * v;
-      if (i >= bassLow && i <= bassHigh) bassSum += v * v;
-    }
-    const broadband = totalSum / freqBinCount;
-    const bass = bassSum / (bassHigh - bassLow + 1);
-    const combined = 0.4 * broadband + 0.6 * bass;
-
-    energyHistory.push(combined);
-    const maxHistory = 60; // ~1s @ 60fps
-    if (energyHistory.length > maxHistory) energyHistory.shift();
-    const avg = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
-
-    const now = audioCtx.currentTime;
-    const minSpacing = bpmEstimate ? (60 / bpmEstimate) * 0.45 : 0.25;
-    const last = onsetTimes[onsetTimes.length - 1];
-    if (combined > avg * 1.35 && combined > 0.015 && (!last || now - last > minSpacing)) {
-      const type = combined > avg * 1.9 ? 'strong' : 'weak';
-      onsetTimes.push(now);
-      if (onsetTimes.length > 8) onsetTimes.shift();
-      updateBPM();
-      if (onsetCallback) onsetCallback({ time: now, energy: combined, type, predictedInterval: getBeatInterval() });
-    }
-
-    rafId = requestAnimationFrame(loop);
-  }
-
-  function updateBPM() {
-    if (onsetTimes.length < 2) return;
-    const intervals = [];
-    for (let i = 1; i < onsetTimes.length; i++) intervals.push(onsetTimes[i] - onsetTimes[i - 1]);
-    intervals.sort((a, b) => a - b);
-    const median = intervals[Math.floor(intervals.length / 2)];
-    if (median <= 0) return;
-    let bpm = 60 / median;
-    while (bpm < 70) bpm *= 2;
-    while (bpm > 180) bpm /= 2;
-    bpmEstimate = onsetTimes.length < 4 ? bpm : (bpmEstimate * 0.7 + bpm * 0.3);
-  }
-
-  function getBeatInterval() { return 60 / bpmEstimate; }
-  function getBPM() { return Math.round(bpmEstimate); }
-  function getFrequencyData() { return dataArray; }
-  function getOnsetCount() { return onsetTimes.length; }
-  function wasPermissionDenied() { return permissionDenied; }
-
-  return {
-    start, stop, getBeatInterval, getBPM, getFrequencyData, getOnsetCount,
-    wasPermissionDenied,
-    set onBeat(cb) { onsetCallback = cb; },
-    get analyser() { return analyser; },
-    get isRunning() { return running; },
   };
 })();
