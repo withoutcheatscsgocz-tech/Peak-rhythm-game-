@@ -946,6 +946,47 @@ const App = (() => {
     return lines.length;
   }
 
+  // ---------------- native share helper ----------------
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function shareBlob(blob, filename, shareOpts) {
+    const cap = window.Capacitor;
+    const isNative = cap && cap.isNativePlatform && cap.isNativePlatform();
+    if (isNative && cap.Plugins && cap.Plugins.Filesystem && cap.Plugins.Share) {
+      try {
+        const data = await blobToBase64(blob);
+        const written = await cap.Plugins.Filesystem.writeFile({ path: filename, data, directory: 'CACHE' });
+        await cap.Plugins.Share.share(Object.assign({ files: [written.uri] }, shareOpts));
+        return true;
+      } catch (e) {
+        // fall through to web fallback
+      }
+    }
+    const file = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share(Object.assign({ files: [file] }, shareOpts));
+        return true;
+      } catch (e) {}
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return false;
+  }
+
   function handleShareCard() {
     if (!lastResult) return;
     const W = 1080, H = 1920;
@@ -1030,51 +1071,23 @@ const App = (() => {
     ctx.font = '24px "Courier New", monospace';
     ctx.fillText('ONE DOT - A RHYTHM GAME FOR YOUR EARS', W / 2, H - 60);
 
-    canvas.toBlob(async (blob) => {
+    canvas.toBlob((blob) => {
       if (!blob) return;
-      const file = new File([blob], 'onedot-score.png', { type: 'image/png' });
-      let shared = false;
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: 'ONE DOT', text: `I scored ${Math.round(lastResult.score).toLocaleString('en-US')} on ONE DOT!` });
-          shared = true;
-        } catch (e) {}
-      }
-      if (!shared) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'onedot-score.png';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      }
+      shareBlob(blob, 'onedot-score.png', {
+        title: 'ONE DOT',
+        text: `I scored ${Math.round(lastResult.score).toLocaleString('en-US')} on ONE DOT!`,
+        dialogTitle: 'Share your score',
+      });
     }, 'image/png');
   }
 
   // ---------------- instant replay ----------------
   async function handleSaveReplay() {
     if (!lastReplayBlob) return;
-    const blob = lastReplayBlob;
-    const file = new File([blob], 'onedot-replay.webm', { type: blob.type || 'video/webm' });
-    let shared = false;
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: 'ONE DOT Replay' });
-        shared = true;
-      } catch (e) {}
-    }
-    if (!shared) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'onedot-replay.webm';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
+    await shareBlob(lastReplayBlob, 'onedot-replay.webm', {
+      title: 'ONE DOT Replay',
+      dialogTitle: 'Share your replay',
+    });
     UI.setReplayToastVisible(false);
   }
 
