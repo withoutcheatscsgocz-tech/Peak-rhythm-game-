@@ -321,6 +321,10 @@
   <div class="leaderboard-placement hidden" id="placement-banner"></div>
   <div class="panel scroll-panel hidden" id="global-leaderboard-panel">
     <h3>GLOBAL LEADERBOARD</h3>
+    <label class="leaderboard-name-row">
+      <span>YOUR NAME</span>
+      <input type="text" id="global-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234">
+    </label>
     <div id="global-leaderboard-list"></div>
   </div>
   <div class="menu-row">
@@ -397,6 +401,20 @@
 <div id="screen-public-library" class="screen">
   <h2>PUBLIC LIBRARY</h2>
   <p class="library-hint">Songs and levels published by other players. Tap PLAY to download one and play it - your score goes on its global leaderboard.</p>
+  <div class="library-controls" id="public-library-controls">
+    <input type="text" id="public-search-input" class="text-input" placeholder="SEARCH TITLE / AUTHOR" autocomplete="off">
+    <div class="library-controls-row">
+      <select id="public-sort-select" class="select-input focusable">
+        <option value="newest">NEWEST</option>
+        <option value="played">MOST PLAYED</option>
+        <option value="rating">TOP RATED</option>
+        <option value="bpm-asc">BPM LOW→HIGH</option>
+        <option value="bpm-desc">BPM HIGH→LOW</option>
+      </select>
+      <input type="number" id="public-bpm-min" class="text-input bpm-input" placeholder="MIN BPM" inputmode="numeric" min="0">
+      <input type="number" id="public-bpm-max" class="text-input bpm-input" placeholder="MAX BPM" inputmode="numeric" min="0">
+    </div>
+  </div>
   <div id="public-library-list" class="grid-list library-list scroll-panel"></div>
   <button class="btn ghost focusable" data-action="back">BACK</button>
 </div>

@@ -776,7 +776,7 @@ const UI = (() => {
   }
 
   // ---------------- global leaderboard (public library levels) ----------------
-  function showGlobalLeaderboard(entries, playerName) {
+  function showGlobalLeaderboard(entries, playerName, onRename) {
     const panel = $('global-leaderboard-panel');
     const list = $('global-leaderboard-list');
     list.innerHTML = '';
@@ -784,13 +784,31 @@ const UI = (() => {
       panel.classList.add('hidden');
       return;
     }
+
+    // Editable display name right here, so a player can set the name shown on
+    // global boards without digging into Settings (it persists across runs).
+    const nameInput = $('global-name-input');
+    if (nameInput) {
+      nameInput.value = playerName || '';
+      nameInput.onchange = () => {
+        Storage.setPlayerName(nameInput.value);
+        nameInput.value = Storage.getPlayerName();
+        if (onRename) onRename(Storage.getPlayerName());
+      };
+    }
+
     entries.forEach((e, i) => {
       const row = document.createElement('div'); row.className = 'leaderboard-entry';
-      if (e.player_name === playerName) row.style.color = 'var(--accent)';
+      const isMe = e.player_name === playerName;
+      if (isMe) row.classList.add('me');
       const rank = document.createElement('span'); rank.className = 'rank'; rank.textContent = `#${i + 1}`;
       const info = document.createElement('span');
       info.textContent = `${e.player_name}  •  ${Math.round(e.score)} pts  •  ${e.max_combo || 0}x`;
       row.appendChild(rank); row.appendChild(info);
+      if (isMe) {
+        const youTag = document.createElement('span'); youTag.className = 'you-tag'; youTag.textContent = 'YOU';
+        row.appendChild(youTag);
+      }
       list.appendChild(row);
     });
     panel.classList.remove('hidden');
@@ -1085,7 +1103,7 @@ const UI = (() => {
     ['other', 'OTHER'],
   ];
 
-  function populatePublicLibrary(levels, onPlay, onReport, onDelete, myLevelIds) {
+  function populatePublicLibrary(levels, onPlay, onReport, onDelete, myLevelIds, onRate, isEmptyMessage) {
     const list = $('public-library-list');
     list.innerHTML = '';
     if (!Cloud.isConfigured()) {
@@ -1098,7 +1116,8 @@ const UI = (() => {
     if (!levels || !levels.length) {
       const empty = document.createElement('div');
       empty.className = 'panel';
-      empty.textContent = 'No songs published yet. Be the first - upload a song, then PUBLISH TO PUBLIC LIBRARY!';
+      empty.textContent = isEmptyMessage
+        || 'No songs published yet. Be the first - upload a song, then PUBLISH TO PUBLIC LIBRARY!';
       list.appendChild(empty);
       return;
     }
@@ -1115,6 +1134,41 @@ const UI = (() => {
       body.appendChild(name); body.appendChild(hint);
       const actions = document.createElement('div');
       actions.className = 'item-actions';
+
+      // ---- community rating (thumbs up / down) ----
+      if (onRate) {
+        let myVote = Storage.getLevelRating(level.id); // local optimistic state (1 / -1 / 0)
+        const upBtn = document.createElement('button');
+        upBtn.className = 'btn small ghost rate rate-up focusable';
+        upBtn.setAttribute('aria-label', 'Thumbs up');
+        const downBtn = document.createElement('button');
+        downBtn.className = 'btn small ghost rate rate-down focusable';
+        downBtn.setAttribute('aria-label', 'Thumbs down');
+        const render = () => {
+          upBtn.textContent = `👍 ${level.upvote_count || 0}`;
+          downBtn.textContent = `👎 ${level.downvote_count || 0}`;
+          upBtn.classList.toggle('active', myVote === 1);
+          downBtn.classList.toggle('active', myVote === -1);
+        };
+        const vote = (dir) => {
+          const prev = myVote;
+          const next = prev === dir ? 0 : dir;     // tapping your current vote clears it
+          // optimistic local update so the UI reacts instantly
+          if (prev === 1) level.upvote_count = Math.max(0, (level.upvote_count || 0) - 1);
+          if (prev === -1) level.downvote_count = Math.max(0, (level.downvote_count || 0) - 1);
+          if (next === 1) level.upvote_count = (level.upvote_count || 0) + 1;
+          if (next === -1) level.downvote_count = (level.downvote_count || 0) + 1;
+          myVote = next;
+          render();
+          onRate(level, next, prev);
+        };
+        upBtn.addEventListener('click', () => vote(1));
+        downBtn.addEventListener('click', () => vote(-1));
+        render();
+        actions.appendChild(upBtn);
+        actions.appendChild(downBtn);
+      }
+
       const playBtn = document.createElement('button');
       playBtn.className = 'btn small focusable';
       playBtn.textContent = 'PLAY';

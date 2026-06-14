@@ -32,12 +32,24 @@ const Cloud = (() => {
   }
 
   // ---------------- public level list ----------------
+  // Fetches a generous page (newest first); the client sorts/filters/searches
+  // this set locally so the toolbar reacts instantly without extra round-trips.
   async function fetchPublicLevels() {
     if (!isConfigured()) return [];
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?select=id,title,author_name,bpm,duration,play_count,created_at&order=created_at.desc&limit=50`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?select=id,title,author_name,bpm,duration,play_count,upvote_count,downvote_count,created_at&order=created_at.desc&limit=100`, {
       headers: authHeaders(),
     });
     if (!res.ok) throw new Error(`fetchPublicLevels failed: ${res.status}`);
+    return res.json();
+  }
+
+  /** Returns already-published levels with this exact song hash (used to warn about duplicate uploads). */
+  async function findLevelsByHash(songHash) {
+    if (!isConfigured() || !songHash) return [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/levels?song_hash=eq.${encodeURIComponent(songHash)}&select=id,title,author_name,play_count&limit=5`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`findLevelsByHash failed: ${res.status}`);
     return res.json();
   }
 
@@ -94,6 +106,20 @@ const Cloud = (() => {
   }
 
   // ---------------- moderation ----------------
+  /**
+   * Casts (or switches) a thumbs up/down rating on a level. `value` is 1 / -1 / 0,
+   * `prev` is this device's previous vote so the server can undo it cleanly.
+   */
+  async function rateLevel(levelId, value, prev) {
+    if (!isConfigured()) return;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rate_level`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ p_level_id: levelId, p_value: value | 0, p_prev: prev | 0 }),
+    });
+    if (!res.ok) throw new Error(`rateLevel failed: ${res.status}`);
+  }
+
   /** Flags a shared level with a reason; the server auto-hides it once enough players report it. */
   async function reportLevel(levelId, reason) {
     if (!isConfigured()) return;
@@ -180,9 +206,9 @@ const Cloud = (() => {
   return {
     isConfigured,
     MAX_UPLOAD_BYTES,
-    fetchPublicLevels, fetchLevel,
+    fetchPublicLevels, fetchLevel, findLevelsByHash,
     fetchLeaderboard, submitScore, incrementPlayCount,
-    reportLevel,
+    rateLevel, reportLevel,
     downloadSong, publishLevel, deleteLevel,
   };
 })();

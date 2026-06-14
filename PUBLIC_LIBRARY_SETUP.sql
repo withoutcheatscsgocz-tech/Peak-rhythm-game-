@@ -23,6 +23,8 @@ create table if not exists levels (
   level_data jsonb not null,   -- { analysis, levelData } - same shape used locally
   storage_path text not null,  -- path inside the "songs" storage bucket
   play_count integer not null default 0,
+  upvote_count integer not null default 0,   -- community rating: thumbs up
+  downvote_count integer not null default 0, -- community rating: thumbs down
   report_count integer not null default 0,  -- community moderation: auto-hidden past a threshold
   owner_token text,  -- secret held by the publishing device, lets it delete this level later
   created_at timestamptz not null default now()
@@ -31,6 +33,9 @@ create table if not exists levels (
 -- (idempotent) add columns to projects created before they existed
 alter table levels add column if not exists report_count integer not null default 0;
 alter table levels add column if not exists owner_token text;
+-- Community rating (thumbs up/down) - a quality signal independent of reports.
+alter table levels add column if not exists upvote_count integer not null default 0;
+alter table levels add column if not exists downvote_count integer not null default 0;
 
 -- Global leaderboard entries, one per finished run on a shared level
 create table if not exists scores (
@@ -103,6 +108,28 @@ returns void as $$
 $$ language sql security definer;
 
 grant execute on function increment_play_count(uuid) to anon;
+
+-- RPC used to cast/switch a thumbs up/down rating on a level. The device keeps
+-- its previous vote locally (-1, 0, 1) and passes it as p_prev so the server can
+-- undo it before applying the new one - this keeps counts correct when a player
+-- changes their mind, without needing a login system to dedupe votes per user.
+create or replace function rate_level(p_level_id uuid, p_value int, p_prev int default 0)
+returns void as $$
+begin
+  update levels set
+    upvote_count = greatest(0,
+      upvote_count
+      - (case when p_prev = 1 then 1 else 0 end)
+      + (case when p_value = 1 then 1 else 0 end)),
+    downvote_count = greatest(0,
+      downvote_count
+      - (case when p_prev = -1 then 1 else 0 end)
+      + (case when p_value = -1 then 1 else 0 end))
+  where id = p_level_id;
+end;
+$$ language plpgsql security definer;
+
+grant execute on function rate_level(uuid, int, int) to anon;
 
 -- Individual report records (reason kept for manual moderation review via
 -- the Supabase dashboard). Write-only from clients - no select policy.

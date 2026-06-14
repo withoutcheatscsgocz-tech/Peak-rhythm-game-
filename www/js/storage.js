@@ -88,6 +88,7 @@ const Storage = (() => {
       tunerSettings: {}, // hash -> { bass:{sensitivity,minSpacing} }
       songLibrary: {}, // hash -> { name, bpm, duration, intensity, analysis, levelData, addedDate }
       myPublishedLevels: {}, // levelId -> { token, title, createdAt } - lets this device delete its own uploads
+      levelRatings: {}, // levelId -> 1 | -1 : this device's thumbs up/down vote on Public Library levels
     };
   }
 
@@ -379,6 +380,15 @@ const Storage = (() => {
     return new Set(Object.keys(load().myPublishedLevels));
   }
 
+  // ---------------- public library: this device's thumbs up/down votes ----------------
+  function getLevelRating(id) { return load().levelRatings[id] || 0; }
+  function setLevelRating(id, value) {
+    const d = load();
+    if (value === 1 || value === -1) d.levelRatings[id] = value;
+    else delete d.levelRatings[id];
+    save();
+  }
+
   // ---------------- stats ----------------
   function getStats() { return load().stats; }
 
@@ -397,6 +407,7 @@ const Storage = (() => {
     getTunerSettings, setTunerSettings,
     getCachedSong, cacheSongAnalysis, getLibrarySongs,
     recordPublishedLevel, getOwnerToken, removePublishedLevel, getMyPublishedLevelIds,
+    getLevelRating, setLevelRating,
     getStats,
     isTutorialDone, markTutorialDone,
     SKIN_UNLOCK_ACHIEVEMENT,

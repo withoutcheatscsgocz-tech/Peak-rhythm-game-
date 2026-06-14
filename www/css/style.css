@@ -508,9 +508,29 @@ input[type="range"] {
 .library-list .grid-item { text-align: left; cursor: default; }
 .library-list .item-hint { letter-spacing: 0.5px; }
 
+.library-controls {
+  width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+}
+.library-controls .text-input { letter-spacing: 1px; font-size: 13px; }
+.library-controls-row { display: flex; gap: 8px; }
+.library-controls-row .select-input { flex: 1.4; }
+.library-controls .bpm-input {
+  flex: 1; min-width: 0; padding: 8px; font-size: 12px; letter-spacing: 1px;
+}
+/* hide number spinners so the BPM filters stay compact on mobile */
+.library-controls .bpm-input::-webkit-outer-spin-button,
+.library-controls .bpm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.library-controls .bpm-input { -moz-appearance: textfield; }
+
 .public-library-item {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
 }
+.public-library-item .item-actions .btn.rate {
+  margin: 0; padding: 12px 8px; min-width: 38px; line-height: 1; font-size: 11px; letter-spacing: 0;
+}
+.public-library-item .item-actions .btn.rate.active { color: var(--accent); border-color: var(--accent); }
+.public-library-item .item-actions .rate-up.active { color: #3cffb0; border-color: #3cffb0; }
+.public-library-item .item-actions .rate-down.active { color: #ff5a3c; border-color: #ff5a3c; }
 .public-library-item .item-body { flex: 1; min-width: 0; }
 .public-library-item .btn { margin: 0; flex-shrink: 0; }
 .public-library-item .item-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -547,6 +567,18 @@ input[type="range"] {
   border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px; letter-spacing: 1px;
 }
 .leaderboard-entry .rank { color: var(--accent-dim); width: 28px; }
+.leaderboard-entry > span:nth-child(2) { flex: 1; }
+.leaderboard-entry.me { color: var(--accent); font-weight: bold; }
+.leaderboard-entry .you-tag {
+  flex: 0 0 auto; font-size: 9px; letter-spacing: 1px; padding: 2px 6px; margin-left: 8px;
+  border: 1px solid var(--accent); border-radius: 4px; align-self: center;
+}
+.leaderboard-name-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  font-size: 11px; letter-spacing: 1px; color: var(--accent-dim);
+}
+.leaderboard-name-row span { flex: 0 0 auto; }
+.leaderboard-name-row .text-input { flex: 1; padding: 8px; font-size: 13px; letter-spacing: 1px; }
 .leaderboard-placement {
   font-size: 18px; letter-spacing: 3px; margin: 8px 0; text-shadow: 0 0 12px var(--accent);
   text-align: center;

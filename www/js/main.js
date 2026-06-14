@@ -24,6 +24,12 @@ const App = (() => {
   let multiplayer = null;
   let challenge = null;
 
+  // Public Library: the full fetched page is cached so the search/sort/BPM
+  // toolbar filters it locally and instantly (no extra network round-trips).
+  let publicLevelsCache = [];
+  let publicLibraryControlsBound = false;
+  let publicLibraryLoading = false;
+
   // ---------------- helpers ----------------
   function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -353,14 +359,87 @@ const App = (() => {
   async function openPublicLibrary() {
     UI.resetNav();
     UI.showScreen('screen-public-library');
-    const myLevelIds = Storage.getMyPublishedLevelIds();
+    bindPublicLibraryControls();
+    publicLevelsCache = [];
+    publicLibraryLoading = true;
+    renderPublicLibrary(); // shows loading state immediately
     try {
-      const levels = await Cloud.fetchPublicLevels();
-      UI.populatePublicLibrary(levels, playPublicLevel, reportPublicLevel, deletePublicLevel, myLevelIds);
+      publicLevelsCache = await Cloud.fetchPublicLevels();
     } catch (e) {
       console.error(e);
       UI.showToast('Could not load Public Library (check connection).');
-      UI.populatePublicLibrary([], playPublicLevel, reportPublicLevel, deletePublicLevel, myLevelIds);
+      publicLevelsCache = [];
+    } finally {
+      publicLibraryLoading = false;
+      renderPublicLibrary();
+    }
+  }
+
+  /** Wires the search / sort / BPM-range toolbar once; each change just re-filters the cached list. */
+  function bindPublicLibraryControls() {
+    if (publicLibraryControlsBound) return;
+    publicLibraryControlsBound = true;
+    ['public-search-input', 'public-bpm-min', 'public-bpm-max'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('input', renderPublicLibrary);
+    });
+    const sort = $('public-sort-select');
+    if (sort) sort.addEventListener('change', renderPublicLibrary);
+  }
+
+  /** Filters + sorts the cached Public Library page from the toolbar, then renders it. */
+  function renderPublicLibrary() {
+    const myLevelIds = Storage.getMyPublishedLevelIds();
+    const query = (($('public-search-input') || {}).value || '').trim().toLowerCase();
+    const sort = (($('public-sort-select') || {}).value) || 'newest';
+    const bpmMin = parseFloat(($('public-bpm-min') || {}).value) || 0;
+    const bpmMax = parseFloat(($('public-bpm-max') || {}).value) || Infinity;
+
+    let levels = publicLevelsCache.filter(l => {
+      const bpm = Math.round(l.bpm || 0);
+      if (bpm < bpmMin || bpm > bpmMax) return false;
+      if (!query) return true;
+      return (l.title || '').toLowerCase().includes(query)
+        || (l.author_name || '').toLowerCase().includes(query);
+    });
+
+    const ratingScore = (l) => (l.upvote_count || 0) - (l.downvote_count || 0);
+    const sorters = {
+      newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+      played: (a, b) => (b.play_count || 0) - (a.play_count || 0),
+      rating: (a, b) => ratingScore(b) - ratingScore(a),
+      'bpm-asc': (a, b) => (a.bpm || 0) - (b.bpm || 0),
+      'bpm-desc': (a, b) => (b.bpm || 0) - (a.bpm || 0),
+    };
+    levels = levels.slice().sort(sorters[sort] || sorters.newest);
+
+    const emptyMsg = publicLibraryLoading
+      ? 'Loading Public Library…'
+      : (publicLevelsCache.length
+        ? 'No songs match your search. Try clearing the filters.'
+        : undefined); // undefined -> default "be the first to publish" hint
+    UI.populatePublicLibrary(
+      levels, playPublicLevel, reportPublicLevel, deletePublicLevel,
+      myLevelIds, ratePublicLevel, emptyMsg,
+    );
+  }
+
+  /** Casts/switches this device's thumbs up/down on a shared level. Optimistic; persists the vote locally. */
+  async function ratePublicLevel(level, value, prev) {
+    if (!level || !Cloud.isConfigured()) return;
+    Storage.setLevelRating(level.id, value);
+    try {
+      await Cloud.rateLevel(level.id, value, prev);
+    } catch (e) {
+      console.error(e);
+      // roll back local vote + optimistic counts so the UI stays truthful
+      Storage.setLevelRating(level.id, prev);
+      if (value === 1) level.upvote_count = Math.max(0, (level.upvote_count || 0) - 1);
+      if (value === -1) level.downvote_count = Math.max(0, (level.downvote_count || 0) - 1);
+      if (prev === 1) level.upvote_count = (level.upvote_count || 0) + 1;
+      if (prev === -1) level.downvote_count = (level.downvote_count || 0) + 1;
+      UI.showToast('Could not save your rating (check connection).');
+      renderPublicLibrary();
     }
   }
 
@@ -386,7 +465,8 @@ const App = (() => {
     try {
       await Cloud.deleteLevel(level.id, token);
       Storage.removePublishedLevel(level.id);
-      if (onDone) onDone();
+      publicLevelsCache = publicLevelsCache.filter(l => l.id !== level.id);
+      renderPublicLibrary();
       UI.showToast('Level deleted.');
     } catch (e) {
       console.error(e);
@@ -440,6 +520,27 @@ const App = (() => {
       return;
     }
     const title = UI.getPublishTitle() || current.songName || 'Untitled';
+
+    // Duplicate detection: the same audio file produces the same song_hash, so
+    // if it's already in the library, point the player to it instead of stacking
+    // identical copies (and splitting the shared leaderboard across them).
+    try {
+      const dupes = await Cloud.findLevelsByHash(current.songHash);
+      if (dupes && dupes.length) {
+        const d = dupes[0];
+        const ok = window.confirm(
+          `This exact song is already in the Public Library as "${d.title}" by ${d.author_name} ` +
+          `(${d.play_count || 0} plays). Publish another copy anyway?`,
+        );
+        if (!ok) {
+          UI.setPublishStatus('Already in the Public Library - find it there to play and compete on its leaderboard.');
+          return;
+        }
+      }
+    } catch (e) {
+      console.error(e); // non-fatal: if the dupe check fails, fall through and publish
+    }
+
     UI.setPublishStatus('Publishing...');
     try {
       const result = await Cloud.publishLevel({
@@ -484,7 +585,19 @@ const App = (() => {
       });
       await Cloud.incrementPlayCount(level.id);
       const entries = await Cloud.fetchLeaderboard(level.id);
-      UI.showGlobalLeaderboard(entries, Storage.getPlayerName());
+      UI.showGlobalLeaderboard(entries, Storage.getPlayerName(), refreshGlobalLeaderboard);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  /** Re-fetches and re-renders the current level's global leaderboard (e.g. after a name change). */
+  async function refreshGlobalLeaderboard() {
+    const level = current.publicLevel;
+    if (!level || !Cloud.isConfigured()) return;
+    try {
+      const entries = await Cloud.fetchLeaderboard(level.id);
+      UI.showGlobalLeaderboard(entries, Storage.getPlayerName(), refreshGlobalLeaderboard);
     } catch (e) {
       console.error(e);
     }
