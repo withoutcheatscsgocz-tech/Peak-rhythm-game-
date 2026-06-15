@@ -445,17 +445,25 @@ const AudioEngine = (() => {
       .map(o => ({ time: o.time, strength: o.strength, snapped: false }))
       .filter(e => e.time >= 0 && e.time <= duration - 0.05));
 
-    // straightness = fraction of near-grid events sitting within 20ms of a
+    // straightness = fraction of near-grid events sitting within 30ms of a
     // 16th line. High -> programmed/quantized -> snap hard; low -> groove ->
-    // snap barely (just remove the worst few-ms detection jitter).
+    // snap barely (just remove the worst few-ms detection jitter). The 30ms
+    // window keeps slightly-jittery-but-programmed tracks reading as "straight"
+    // so they still quantize fully.
     let near = 0, total = 0;
     for (const e of events) {
       const k = Math.round((e.time - beatPhaseSec) / sixteenthSec);
       const dev = Math.abs(e.time - (beatPhaseSec + k * sixteenthSec));
-      if (dev <= sixteenthSec * 0.5) { total++; if (dev <= 0.02) near++; }
+      if (dev <= sixteenthSec * 0.5) { total++; if (dev <= 0.03) near++; }
     }
     const straightness = total ? near / total : 0;
-    const snapTol = 0.018 + 0.030 * clamp01((straightness - 0.45) / 0.25);
+    // On clearly-programmed (straight) songs, snap almost everything onto the
+    // 16th grid so the chart is machine-tight; on grooved/live songs barely snap
+    // so the human feel survives. Tolerance is capped at HALF a 16th note, so
+    // even if the grid drifts a little over a long song an onset only ever moves
+    // to its own nearest line - the snap can never accumulate into a big offset.
+    const maxSnap = sixteenthSec * 0.5;
+    const snapTol = Math.min(maxSnap, 0.020 + (maxSnap - 0.020) * clamp01((straightness - 0.40) / 0.35));
 
     for (const e of events) {
       const k = Math.round((e.time - beatPhaseSec) / sixteenthSec);
@@ -467,6 +475,16 @@ const AudioEngine = (() => {
     const strengths = events.map(e => e.strength).sort((a, b) => a - b);
     const sP95 = strengths.length ? strengths[Math.floor(strengths.length * 0.95)] : 1;
     events.forEach(e => { e.strength = clamp01(e.strength / (sP95 || 1)); });
+
+    // On an otherwise machine-tight song, an onset that is BOTH weak AND failed
+    // to land on the grid is almost certainly detection noise (a reverb tail, a
+    // bleed transient) rather than a real hit the player can hear on the beat.
+    // Dropping those removes the handful of "random feeling" spikes without
+    // touching grooved songs (where off-grid hits are the actual feel).
+    if (straightness >= 0.55 && events.length > 8) {
+      const filtered = events.filter(e => e.snapped || e.strength >= 0.28);
+      if (filtered.length >= events.length * 0.6) events = filtered; // never gut the chart
+    }
     if (onProgress) { onProgress(0.85); await yieldToUI(); }
 
     // ---- sections (intro/chill/build/drop) from total energy ----
