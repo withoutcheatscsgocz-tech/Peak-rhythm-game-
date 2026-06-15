@@ -530,6 +530,6 @@ const Storage = (() => {
     getLevelRating, setLevelRating,
     getStats,
     isTutorialDone, markTutorialDone,
-    SKIN_UNLOCK_ACHIEVEMENT,
+    SKIN_UNLOCK_ACHIEVEMENT, TRAIL_UNLOCK_ACHIEVEMENT,
   };
 })();

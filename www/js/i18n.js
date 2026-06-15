@@ -1299,6 +1299,428 @@ const I18N = (() => {
     'playlistSummary.title': 'PLAYLISTA ZAKOŃCZONA',
   };
 
+  // ============================================================
+  //  Dynamic content strings (modifiers / achievements / cosmetics)
+  //  Merged into STRINGS below so t() resolves them through the usual
+  //  locale -> English -> def-fallback chain. Every name / desc / hint
+  //  falls back to the English string baked into the corresponding def
+  //  object (game.js / storage.js), so any untranslated entry still
+  //  shows readable English instead of a raw key. Skin/trail unlock
+  //  hints are NOT listed per id - they are composed at render time from
+  //  cosmetic.unlockVia + the localized achievement name.
+  //  Proper/scientific cosmetic names (PULSAR, NOVA, NEBULA, MAGMA,
+  //  NEON, MATRIX, VAPORWAVE, CYBERPUNK, ARCADE, NOIR...) are left off
+  //  on purpose so they fall back to the shared English spelling.
+  // ============================================================
+  const CONTENT_STRINGS = {
+    en: {
+      'cosmetic.tapToSelect': 'TAP TO SELECT',
+      'cosmetic.fromStart': 'Unlocked from the start',
+      'cosmetic.unlockVia': 'Unlock via {name}',
+      'trail.none.hint': 'No trail - clean look',
+    },
+
+    cs: {
+      'mod.slowed.name': 'ZPOMALENO + REVERB \u{1F317}', 'mod.slowed.desc': 'Skladba na 0,8× rychlosti se snovým reverbem a fialovým oparem',
+      'mod.autoJump.name': 'AUTO-ODRAZ', 'mod.autoJump.desc': 'Míček dopadne perfektně na každý hrot automaticky – jen si to užij',
+      'mod.noFail.name': 'BEZ SELHÁNÍ', 'mod.noFail.desc': 'Zásahy nikdy nerestartují, jen vynulují kombo',
+      'mod.widerWindows.name': 'ŠIRŠÍ OKNA', 'mod.widerWindows.desc': 'Perfect ±180 ms, Good ±280 ms',
+      'mod.rush.name': 'RUSH 1.25×', 'mod.rush.desc': 'Skladba na 1,25× rychlosti',
+      'mod.insane.name': 'ŠÍLENÉ 1.5×', 'mod.insane.desc': 'Skladba na 1,5× rychlosti',
+      'mod.bpmOnly.name': 'POUZE BPM', 'mod.bpmOnly.desc': 'Hudba ztlumena – jen syntetický metronom',
+      'mod.blindRing.name': 'SLEPÝ PRSTENEC', 'mod.blindRing.desc': 'Žádný pomocný metronomový prstenec – jen uši',
+      'mod.suddenDeath.name': 'NÁHLÁ SMRT', 'mod.suddenDeath.desc': '1 zásah = restart od checkpointu',
+      'mod.ghostDot.name': 'DUCH MÍČEK', 'mod.ghostDot.desc': 'Míček ve vzduchu vybledne téměř do neviditelna',
+
+      'ach.firstSteps.name': 'PRVNÍ KROKY', 'ach.firstSteps.hint': 'Dokonči svou první skladbu',
+      'ach.flawless.name': 'BEZCHYBNÉ', 'ach.flawless.hint': 'Dokonči skladbu se 100% perfect',
+      'ach.dropSurvivor.name': 'PŘEŽIL DROP', 'ach.dropSurvivor.hint': 'Projdi celou drop sekci bez zásahu',
+      'ach.blindFaith.name': 'SLEPÁ VÍRA', 'ach.blindFaith.hint': 'Dokonči skladbu se zapnutým SLEPÝM PRSTENCEM',
+      'ach.marathon.name': 'MARATON', 'ach.marathon.hint': 'Skoč 1000× (celkově)',
+      'ach.speedDemon.name': 'DÉMON RYCHLOSTI', 'ach.speedDemon.hint': 'Dokonči skladbu na ŠÍLENÉ 1.5×',
+      'ach.comboKing.name': 'KRÁL KOMBA', 'ach.comboKing.hint': 'Dosáhni komba 200',
+      'ach.collector.name': 'SBĚRATEL', 'ach.collector.hint': 'Odemkni všechny motivy',
+      'ach.nightShift.name': 'NOČNÍ SMĚNA', 'ach.nightShift.hint': 'Zahraj celkem 10 skladeb',
+      'ach.perfectTen.name': 'PERFEKTNÍ DESÍTKA', 'ach.perfectTen.hint': 'Získej 10 perfect v řadě, 5× v jedné skladbě',
+      'ach.centurion.name': 'CENTURION', 'ach.centurion.hint': 'Dosáhni komba 100',
+      'ach.suddenDeathSurvivor.name': 'NERVY ZE ŽELEZA', 'ach.suddenDeathSurvivor.hint': 'Dokonči skladbu se zapnutou NÁHLOU SMRTÍ',
+      'ach.bpmPurist.name': 'ČISTÝ RYTMUS', 'ach.bpmPurist.hint': 'Dokonči skladbu s POUZE BPM',
+      'ach.ghostBuster.name': 'KROTITEL DUCHŮ', 'ach.ghostBuster.hint': 'Poraz svého ducha se zapnutým DUCH MÍČKEM',
+      'ach.dedication.name': 'ODHODLÁNÍ', 'ach.dedication.hint': 'Hraj celkem 1 hodinu',
+      'ach.ironLegs.name': 'ŽELEZNÉ NOHY', 'ach.ironLegs.hint': 'Skoč 5000× (celkově)',
+      'ach.veteran.name': 'VETERÁN', 'ach.veteran.hint': 'Zahraj celkem 50 skladeb',
+      'ach.legendary.name': 'LEGENDÁRNÍ', 'ach.legendary.hint': 'Dosáhni komba 500',
+      'ach.chaosTheory.name': 'TEORIE CHAOSU', 'ach.chaosTheory.hint': 'Použij 5 různých modifikátorů (celkově)',
+      'ach.gluttonForPunishment.name': 'NENASYTA TRESTU', 'ach.gluttonForPunishment.hint': 'Dokonči skladbu se 3+ aktivními těžkými modifikátory',
+      'ach.archivist.name': 'ARCHIVÁŘ', 'ach.archivist.hint': 'Ulož 8 skladeb do knihovny',
+      'ach.goingPublic.name': 'JDU NA VEŘEJNOST', 'ach.goingPublic.hint': 'Zveřejni úroveň do Veřejné knihovny',
+      'ach.endlessLegend.name': 'NEKONEČNÁ LEGENDA', 'ach.endlessLegend.hint': 'Přežij 5 skladeb v jednom Nekonečném běhu',
+      'ach.nightOwl.name': 'NOČNÍ SOVA', 'ach.nightOwl.hint': 'Dokonči skladbu mezi půlnocí a 5. ranní',
+
+      'theme.default.name': 'VÝCHOZÍ', 'theme.default.hint': 'Odemčeno od začátku',
+      'theme.vaporwave.hint': 'Dokonči svou první skladbu',
+      'theme.matrix.hint': 'Dosáhni komba 100+',
+      'theme.bloodmoon.name': 'KRVAVÝ MĚSÍC', 'theme.bloodmoon.hint': 'Dokonči skladbu na ŠÍLENÉ 1.5×',
+      'theme.goldenhour.name': 'ZLATÁ HODINA', 'theme.goldenhour.hint': '95%+ perfect v dokončené skladbě',
+      'theme.frost.name': 'MRÁZ', 'theme.frost.hint': 'Odemkni achievement PERFEKTNÍ DESÍTKA',
+      'theme.sunset.name': 'ZÁPAD SLUNCE', 'theme.sunset.hint': 'Dokonči skladbu s RUSH 1.25×',
+      'theme.inferno.hint': 'Odemkni achievement NERVY ZE ŽELEZA',
+      'theme.cyberpunk.hint': 'Odemkni achievement TEORIE CHAOSU',
+      'theme.emerald.name': 'SMARAGD', 'theme.emerald.hint': 'Odemkni achievement ARCHIVÁŘ',
+      'theme.nebula.name': 'MLHOVINA', 'theme.nebula.hint': 'Odemkni achievement NEKONEČNÁ LEGENDA',
+      'theme.arcade.name': 'ARKÁDA', 'theme.arcade.hint': 'Odemkni achievement JDU NA VEŘEJNOST',
+      'theme.abyss.name': 'PROPAST', 'theme.abyss.hint': 'Odemkni achievement ŽELEZNÉ NOHY',
+      'theme.noir.hint': 'Odemkni achievement NOČNÍ SOVA',
+
+      'skin.classic.name': 'KLASIKA', 'skin.star.name': 'HVĚZDA', 'skin.comet.name': 'KOMETA',
+      'skin.smiley.name': 'SMAJLÍK', 'skin.diamond.name': 'DIAMANT', 'skin.phantom.name': 'FANTOM',
+      'skin.galaxy.name': 'GALAXIE', 'skin.crystal.name': 'KRYSTAL', 'skin.circuit.name': 'OBVOD',
+      'skin.yinyang.name': 'JIN JANG',
+
+      'trail.classic.name': 'KLASIKA', 'trail.none.name': 'ŽÁDNÁ', 'trail.rainbow.name': 'DUHA',
+      'trail.fire.name': 'OHEŇ', 'trail.ribbon.name': 'STUHA', 'trail.sparkle.name': 'JISKRA',
+      'trail.bubbles.name': 'BUBLINY', 'trail.smoke.name': 'KOUŘ', 'trail.electric.name': 'ELEKTRICKÁ',
+      'trail.petals.name': 'OKVĚTNÍ LÍSTKY',
+
+      'cosmetic.tapToSelect': 'KLEPNI PRO VÝBĚR', 'cosmetic.fromStart': 'Odemčeno od začátku',
+      'cosmetic.unlockVia': 'Odemkni přes {name}', 'trail.none.hint': 'Žádná stopa – čistý vzhled',
+    },
+
+    ru: {
+      'mod.slowed.name': 'ЗАМЕДЛЕНО + РЕВЕРБ \u{1F317}', 'mod.slowed.desc': 'Трек на скорости 0.8× с мечтательным ревербом и фиолетовой дымкой',
+      'mod.autoJump.name': 'АВТО-ОТСКОК', 'mod.autoJump.desc': 'Шар идеально приземляется на каждый шип автоматически — просто наслаждайся',
+      'mod.noFail.name': 'БЕЗ ПРОВАЛА', 'mod.noFail.desc': 'Промахи не перезапускают, только сбрасывают комбо',
+      'mod.widerWindows.name': 'ШИРЕ ОКНА', 'mod.widerWindows.desc': 'Perfect ±180 мс, Good ±280 мс',
+      'mod.rush.name': 'РАЗГОН 1.25×', 'mod.rush.desc': 'Трек на скорости 1.25×',
+      'mod.insane.name': 'БЕЗУМИЕ 1.5×', 'mod.insane.desc': 'Трек на скорости 1.5×',
+      'mod.bpmOnly.name': 'ТОЛЬКО BPM', 'mod.bpmOnly.desc': 'Музыка отключена — только синтетический метроном',
+      'mod.blindRing.name': 'СЛЕПОЕ КОЛЬЦО', 'mod.blindRing.desc': 'Без вспомогательного кольца метронома — только слух',
+      'mod.suddenDeath.name': 'ВНЕЗАПНАЯ СМЕРТЬ', 'mod.suddenDeath.desc': '1 промах = рестарт с чекпоинта',
+      'mod.ghostDot.name': 'ПРИЗРАЧНЫЙ ШАР', 'mod.ghostDot.desc': 'Шар почти исчезает в полёте',
+
+      'ach.firstSteps.name': 'ПЕРВЫЕ ШАГИ', 'ach.firstSteps.hint': 'Заверши свой первый трек',
+      'ach.flawless.name': 'БЕЗУПРЕЧНО', 'ach.flawless.hint': 'Заверши трек со 100% perfect',
+      'ach.dropSurvivor.name': 'ПЕРЕЖИЛ ДРОП', 'ach.dropSurvivor.hint': 'Пройди всю секцию дропа без промаха',
+      'ach.blindFaith.name': 'СЛЕПАЯ ВЕРА', 'ach.blindFaith.hint': 'Заверши трек с включённым СЛЕПЫМ КОЛЬЦОМ',
+      'ach.marathon.name': 'МАРАФОН', 'ach.marathon.hint': 'Прыгни 1000 раз (всего)',
+      'ach.speedDemon.name': 'ДЕМОН СКОРОСТИ', 'ach.speedDemon.hint': 'Заверши трек на БЕЗУМИЕ 1.5×',
+      'ach.comboKing.name': 'КОРОЛЬ КОМБО', 'ach.comboKing.hint': 'Достигни комбо 200',
+      'ach.collector.name': 'КОЛЛЕКЦИОНЕР', 'ach.collector.hint': 'Открой все темы',
+      'ach.nightShift.name': 'НОЧНАЯ СМЕНА', 'ach.nightShift.hint': 'Сыграй всего 10 треков',
+      'ach.perfectTen.name': 'ИДЕАЛЬНАЯ ДЕСЯТКА', 'ach.perfectTen.hint': 'Получи 10 perfect подряд, 5 раз в одном треке',
+      'ach.centurion.name': 'ЦЕНТУРИОН', 'ach.centurion.hint': 'Достигни комбо 100',
+      'ach.suddenDeathSurvivor.name': 'СТАЛЬНЫЕ НЕРВЫ', 'ach.suddenDeathSurvivor.hint': 'Заверши трек с ВНЕЗАПНОЙ СМЕРТЬЮ',
+      'ach.bpmPurist.name': 'ЧИСТЫЙ РИТМ', 'ach.bpmPurist.hint': 'Заверши трек с ТОЛЬКО BPM',
+      'ach.ghostBuster.name': 'ОХОТНИК ЗА ПРИВИДЕНИЯМИ', 'ach.ghostBuster.hint': 'Победи своего призрака с ПРИЗРАЧНЫМ ШАРОМ',
+      'ach.dedication.name': 'ПРЕДАННОСТЬ', 'ach.dedication.hint': 'Играй всего 1 час',
+      'ach.ironLegs.name': 'ЖЕЛЕЗНЫЕ НОГИ', 'ach.ironLegs.hint': 'Прыгни 5000 раз (всего)',
+      'ach.veteran.name': 'ВЕТЕРАН', 'ach.veteran.hint': 'Сыграй всего 50 треков',
+      'ach.legendary.name': 'ЛЕГЕНДАРНО', 'ach.legendary.hint': 'Достигни комбо 500',
+      'ach.chaosTheory.name': 'ТЕОРИЯ ХАОСА', 'ach.chaosTheory.hint': 'Используй 5 разных модификаторов (всего)',
+      'ach.gluttonForPunishment.name': 'ЛЮБИТЕЛЬ НАКАЗАНИЙ', 'ach.gluttonForPunishment.hint': 'Заверши трек с 3+ активными сложными модификаторами',
+      'ach.archivist.name': 'АРХИВАРИУС', 'ach.archivist.hint': 'Сохрани 8 треков в библиотеке',
+      'ach.goingPublic.name': 'ВЫХОД В СВЕТ', 'ach.goingPublic.hint': 'Опубликуй уровень в Публичной библиотеке',
+      'ach.endlessLegend.name': 'БЕСКОНЕЧНАЯ ЛЕГЕНДА', 'ach.endlessLegend.hint': 'Переживи 5 треков за один Бесконечный забег',
+      'ach.nightOwl.name': 'НОЧНАЯ СОВА', 'ach.nightOwl.hint': 'Заверши трек между полуночью и 5 утра',
+
+      'theme.default.name': 'ПО УМОЛЧАНИЮ', 'theme.default.hint': 'Открыто с самого начала',
+      'theme.vaporwave.hint': 'Заверши свой первый трек',
+      'theme.matrix.name': 'МАТРИЦА', 'theme.matrix.hint': 'Достигни комбо 100+',
+      'theme.bloodmoon.name': 'КРОВАВАЯ ЛУНА', 'theme.bloodmoon.hint': 'Заверши трек на БЕЗУМИЕ 1.5×',
+      'theme.goldenhour.name': 'ЗОЛОТОЙ ЧАС', 'theme.goldenhour.hint': '95%+ perfect в завершённом треке',
+      'theme.frost.name': 'МОРОЗ', 'theme.frost.hint': 'Открой достижение ИДЕАЛЬНАЯ ДЕСЯТКА',
+      'theme.sunset.name': 'ЗАКАТ', 'theme.sunset.hint': 'Заверши трек с РАЗГОН 1.25×',
+      'theme.inferno.hint': 'Открой достижение СТАЛЬНЫЕ НЕРВЫ',
+      'theme.cyberpunk.name': 'КИБЕРПАНК', 'theme.cyberpunk.hint': 'Открой достижение ТЕОРИЯ ХАОСА',
+      'theme.emerald.name': 'ИЗУМРУД', 'theme.emerald.hint': 'Открой достижение АРХИВАРИУС',
+      'theme.nebula.name': 'ТУМАННОСТЬ', 'theme.nebula.hint': 'Открой достижение БЕСКОНЕЧНАЯ ЛЕГЕНДА',
+      'theme.arcade.name': 'АРКАДА', 'theme.arcade.hint': 'Открой достижение ВЫХОД В СВЕТ',
+      'theme.abyss.name': 'БЕЗДНА', 'theme.abyss.hint': 'Открой достижение ЖЕЛЕЗНЫЕ НОГИ',
+      'theme.noir.name': 'НУАР', 'theme.noir.hint': 'Открой достижение НОЧНАЯ СОВА',
+
+      'skin.classic.name': 'КЛАССИКА', 'skin.star.name': 'ЗВЕЗДА', 'skin.comet.name': 'КОМЕТА',
+      'skin.smiley.name': 'СМАЙЛИК', 'skin.diamond.name': 'АЛМАЗ', 'skin.phantom.name': 'ФАНТОМ',
+      'skin.galaxy.name': 'ГАЛАКТИКА', 'skin.crystal.name': 'КРИСТАЛЛ', 'skin.circuit.name': 'СХЕМА',
+      'skin.yinyang.name': 'ИНЬ-ЯН',
+
+      'trail.classic.name': 'КЛАССИКА', 'trail.none.name': 'НЕТ', 'trail.rainbow.name': 'РАДУГА',
+      'trail.fire.name': 'ОГОНЬ', 'trail.ribbon.name': 'ЛЕНТА', 'trail.sparkle.name': 'ИСКРЫ',
+      'trail.bubbles.name': 'ПУЗЫРИ', 'trail.smoke.name': 'ДЫМ', 'trail.electric.name': 'МОЛНИЯ',
+      'trail.petals.name': 'ЛЕПЕСТКИ',
+
+      'cosmetic.tapToSelect': 'НАЖМИ ДЛЯ ВЫБОРА', 'cosmetic.fromStart': 'Открыто с самого начала',
+      'cosmetic.unlockVia': 'Открой через {name}', 'trail.none.hint': 'Без следа — чистый вид',
+    },
+
+    de: {
+      'mod.slowed.name': 'VERLANGSAMT + REVERB \u{1F317}', 'mod.slowed.desc': 'Song mit 0,8× Geschwindigkeit, träumerischem Hall und violettem Dunst',
+      'mod.autoJump.name': 'AUTO-SPRUNG', 'mod.autoJump.desc': 'Der Ball landet automatisch perfekt auf jedem Stachel – genieße einfach',
+      'mod.noFail.name': 'KEIN SCHEITERN', 'mod.noFail.desc': 'Treffer starten nie neu, setzen nur dein Combo zurück',
+      'mod.widerWindows.name': 'BREITERE FENSTER', 'mod.widerWindows.desc': 'Perfect ±180 ms, Good ±280 ms',
+      'mod.rush.name': 'RUSH 1.25×', 'mod.rush.desc': 'Song mit 1,25× Geschwindigkeit',
+      'mod.insane.name': 'IRRE 1.5×', 'mod.insane.desc': 'Song mit 1,5× Geschwindigkeit',
+      'mod.bpmOnly.name': 'NUR BPM', 'mod.bpmOnly.desc': 'Musik stumm – nur synthetisches Metronom',
+      'mod.blindRing.name': 'BLINDER RING', 'mod.blindRing.desc': 'Kein Metronom-Hilfsring – nur Gehör',
+      'mod.suddenDeath.name': 'SUDDEN DEATH', 'mod.suddenDeath.desc': '1 Treffer = Neustart vom Checkpoint',
+      'mod.ghostDot.name': 'GEISTERPUNKT', 'mod.ghostDot.desc': 'Der Punkt verblasst in der Luft fast bis zur Unsichtbarkeit',
+
+      'ach.firstSteps.name': 'ERSTE SCHRITTE', 'ach.firstSteps.hint': 'Beende deinen ersten Song',
+      'ach.flawless.name': 'MAKELLOS', 'ach.flawless.hint': 'Beende einen Song mit 100% perfect',
+      'ach.dropSurvivor.name': 'DROP-ÜBERLEBENDER', 'ach.dropSurvivor.hint': 'Überstehe eine ganze Drop-Sektion ohne Treffer',
+      'ach.blindFaith.name': 'BLINDES VERTRAUEN', 'ach.blindFaith.hint': 'Beende einen Song mit BLINDER RING',
+      'ach.marathon.name': 'MARATHON', 'ach.marathon.hint': 'Springe 1000 Mal (gesamt)',
+      'ach.speedDemon.name': 'SPEED-DÄMON', 'ach.speedDemon.hint': 'Beende einen Song auf IRRE 1.5×',
+      'ach.comboKing.name': 'COMBO-KÖNIG', 'ach.comboKing.hint': 'Erreiche ein 200er-Combo',
+      'ach.collector.name': 'SAMMLER', 'ach.collector.hint': 'Schalte alle Themes frei',
+      'ach.nightShift.name': 'NACHTSCHICHT', 'ach.nightShift.hint': 'Spiele insgesamt 10 Songs',
+      'ach.perfectTen.name': 'PERFEKTE ZEHN', 'ach.perfectTen.hint': 'Hol 10 perfect in Folge, 5× in einem Song',
+      'ach.centurion.name': 'ZENTURIO', 'ach.centurion.hint': 'Erreiche ein 100er-Combo',
+      'ach.suddenDeathSurvivor.name': 'NERVEN AUS STAHL', 'ach.suddenDeathSurvivor.hint': 'Beende einen Song mit SUDDEN DEATH',
+      'ach.bpmPurist.name': 'PURER RHYTHMUS', 'ach.bpmPurist.hint': 'Beende einen Song mit NUR BPM',
+      'ach.ghostBuster.name': 'GEISTERJÄGER', 'ach.ghostBuster.hint': 'Schlage deinen Geist mit GEISTERPUNKT',
+      'ach.dedication.name': 'HINGABE', 'ach.dedication.hint': 'Spiele insgesamt 1 Stunde',
+      'ach.ironLegs.name': 'EISERNE BEINE', 'ach.ironLegs.hint': 'Springe 5000 Mal (gesamt)',
+      'ach.veteran.name': 'VETERAN', 'ach.veteran.hint': 'Spiele insgesamt 50 Songs',
+      'ach.legendary.name': 'LEGENDÄR', 'ach.legendary.hint': 'Erreiche ein 500er-Combo',
+      'ach.chaosTheory.name': 'CHAOSTHEORIE', 'ach.chaosTheory.hint': 'Nutze 5 verschiedene Modifikatoren (gesamt)',
+      'ach.gluttonForPunishment.name': 'LUST AUF STRAFE', 'ach.gluttonForPunishment.hint': 'Beende einen Song mit 3+ aktiven harten Modifikatoren',
+      'ach.archivist.name': 'ARCHIVAR', 'ach.archivist.hint': 'Speichere 8 Songs in deiner Bibliothek',
+      'ach.goingPublic.name': 'AN DIE ÖFFENTLICHKEIT', 'ach.goingPublic.hint': 'Veröffentliche ein Level in der öffentlichen Bibliothek',
+      'ach.endlessLegend.name': 'ENDLOSE LEGENDE', 'ach.endlessLegend.hint': 'Überstehe 5 Songs in einem Endlos-Lauf',
+      'ach.nightOwl.name': 'NACHTEULE', 'ach.nightOwl.hint': 'Beende einen Song zwischen Mitternacht und 5 Uhr',
+
+      'theme.default.name': 'STANDARD', 'theme.default.hint': 'Von Anfang an freigeschaltet',
+      'theme.vaporwave.hint': 'Beende deinen ersten Song',
+      'theme.matrix.hint': 'Erreiche ein 100+ Combo',
+      'theme.bloodmoon.name': 'BLUTMOND', 'theme.bloodmoon.hint': 'Beende einen Song auf IRRE 1.5×',
+      'theme.goldenhour.name': 'GOLDENE STUNDE', 'theme.goldenhour.hint': '95%+ perfect in einem beendeten Song',
+      'theme.frost.name': 'FROST', 'theme.frost.hint': 'Schalte den Erfolg PERFEKTE ZEHN frei',
+      'theme.sunset.name': 'SONNENUNTERGANG', 'theme.sunset.hint': 'Beende einen Song mit RUSH 1.25×',
+      'theme.inferno.hint': 'Schalte den Erfolg NERVEN AUS STAHL frei',
+      'theme.cyberpunk.hint': 'Schalte den Erfolg CHAOSTHEORIE frei',
+      'theme.emerald.name': 'SMARAGD', 'theme.emerald.hint': 'Schalte den Erfolg ARCHIVAR frei',
+      'theme.nebula.name': 'NEBEL', 'theme.nebula.hint': 'Schalte den Erfolg ENDLOSE LEGENDE frei',
+      'theme.arcade.hint': 'Schalte den Erfolg AN DIE ÖFFENTLICHKEIT frei',
+      'theme.abyss.name': 'ABGRUND', 'theme.abyss.hint': 'Schalte den Erfolg EISERNE BEINE frei',
+      'theme.noir.hint': 'Schalte den Erfolg NACHTEULE frei',
+
+      'skin.classic.name': 'KLASSISCH', 'skin.star.name': 'STERN', 'skin.comet.name': 'KOMET',
+      'skin.smiley.name': 'SMILEY', 'skin.diamond.name': 'DIAMANT', 'skin.phantom.name': 'PHANTOM',
+      'skin.galaxy.name': 'GALAXIE', 'skin.crystal.name': 'KRISTALL', 'skin.circuit.name': 'SCHALTKREIS',
+      'skin.yinyang.name': 'YIN YANG',
+
+      'trail.classic.name': 'KLASSISCH', 'trail.none.name': 'KEINE', 'trail.rainbow.name': 'REGENBOGEN',
+      'trail.fire.name': 'FEUER', 'trail.ribbon.name': 'BAND', 'trail.sparkle.name': 'FUNKELN',
+      'trail.bubbles.name': 'BLASEN', 'trail.smoke.name': 'RAUCH', 'trail.electric.name': 'ELEKTRISCH',
+      'trail.petals.name': 'BLÜTENBLÄTTER',
+
+      'cosmetic.tapToSelect': 'ZUM AUSWÄHLEN TIPPEN', 'cosmetic.fromStart': 'Von Anfang an freigeschaltet',
+      'cosmetic.unlockVia': 'Freischalten über {name}', 'trail.none.hint': 'Keine Spur – cleaner Look',
+    },
+
+    es: {
+      'mod.slowed.name': 'RALENTIZADO + REVERB \u{1F317}', 'mod.slowed.desc': 'Canción a 0,8× con reverb de ensueño y bruma púrpura',
+      'mod.autoJump.name': 'AUTO-REBOTE', 'mod.autoJump.desc': 'La bola aterriza perfectamente en cada pincho automáticamente – solo disfruta',
+      'mod.noFail.name': 'SIN FALLO', 'mod.noFail.desc': 'Los golpes nunca reinician, solo reinician tu combo',
+      'mod.widerWindows.name': 'VENTANAS AMPLIAS', 'mod.widerWindows.desc': 'Perfect ±180 ms, Good ±280 ms',
+      'mod.rush.name': 'RUSH 1.25×', 'mod.rush.desc': 'Canción a 1,25× de velocidad',
+      'mod.insane.name': 'DEMENCIAL 1.5×', 'mod.insane.desc': 'Canción a 1,5× de velocidad',
+      'mod.bpmOnly.name': 'SOLO BPM', 'mod.bpmOnly.desc': 'Música silenciada – solo metrónomo sintético',
+      'mod.blindRing.name': 'ANILLO CIEGO', 'mod.blindRing.desc': 'Sin anillo de metrónomo – solo oído',
+      'mod.suddenDeath.name': 'MUERTE SÚBITA', 'mod.suddenDeath.desc': '1 golpe = reinicio desde el checkpoint',
+      'mod.ghostDot.name': 'PUNTO FANTASMA', 'mod.ghostDot.desc': 'El punto se desvanece casi invisible en el aire',
+
+      'ach.firstSteps.name': 'PRIMEROS PASOS', 'ach.firstSteps.hint': 'Termina tu primera canción',
+      'ach.flawless.name': 'IMPECABLE', 'ach.flawless.hint': 'Termina una canción con 100% perfect',
+      'ach.dropSurvivor.name': 'SUPERVIVIENTE DEL DROP', 'ach.dropSurvivor.hint': 'Supera una sección de drop completa sin un golpe',
+      'ach.blindFaith.name': 'FE CIEGA', 'ach.blindFaith.hint': 'Termina una canción con ANILLO CIEGO',
+      'ach.marathon.name': 'MARATÓN', 'ach.marathon.hint': 'Salta 1000 veces (total)',
+      'ach.speedDemon.name': 'DEMONIO DE VELOCIDAD', 'ach.speedDemon.hint': 'Termina una canción en DEMENCIAL 1.5×',
+      'ach.comboKing.name': 'REY DEL COMBO', 'ach.comboKing.hint': 'Alcanza un combo de 200',
+      'ach.collector.name': 'COLECCIONISTA', 'ach.collector.hint': 'Desbloquea todos los temas',
+      'ach.nightShift.name': 'TURNO DE NOCHE', 'ach.nightShift.hint': 'Juega 10 canciones en total',
+      'ach.perfectTen.name': 'DIEZ PERFECTOS', 'ach.perfectTen.hint': 'Consigue 10 perfect seguidos, 5 veces en una canción',
+      'ach.centurion.name': 'CENTURIÓN', 'ach.centurion.hint': 'Alcanza un combo de 100',
+      'ach.suddenDeathSurvivor.name': 'NERVIOS DE ACERO', 'ach.suddenDeathSurvivor.hint': 'Termina una canción con MUERTE SÚBITA',
+      'ach.bpmPurist.name': 'RITMO PURO', 'ach.bpmPurist.hint': 'Termina una canción con SOLO BPM',
+      'ach.ghostBuster.name': 'CAZAFANTASMAS', 'ach.ghostBuster.hint': 'Vence a tu fantasma con PUNTO FANTASMA',
+      'ach.dedication.name': 'DEDICACIÓN', 'ach.dedication.hint': 'Juega 1 hora en total',
+      'ach.ironLegs.name': 'PIERNAS DE HIERRO', 'ach.ironLegs.hint': 'Salta 5000 veces (total)',
+      'ach.veteran.name': 'VETERANO', 'ach.veteran.hint': 'Juega 50 canciones en total',
+      'ach.legendary.name': 'LEGENDARIO', 'ach.legendary.hint': 'Alcanza un combo de 500',
+      'ach.chaosTheory.name': 'TEORÍA DEL CAOS', 'ach.chaosTheory.hint': 'Usa 5 modificadores distintos (total)',
+      'ach.gluttonForPunishment.name': 'AMANTE DEL CASTIGO', 'ach.gluttonForPunishment.hint': 'Termina una canción con 3+ modificadores difíciles activos',
+      'ach.archivist.name': 'ARCHIVERO', 'ach.archivist.hint': 'Guarda 8 canciones en tu biblioteca',
+      'ach.goingPublic.name': 'HACERSE PÚBLICO', 'ach.goingPublic.hint': 'Publica un nivel en la Biblioteca Pública',
+      'ach.endlessLegend.name': 'LEYENDA INFINITA', 'ach.endlessLegend.hint': 'Sobrevive 5 canciones en una partida Infinita',
+      'ach.nightOwl.name': 'BÚHO NOCTURNO', 'ach.nightOwl.hint': 'Termina una canción entre medianoche y las 5 am',
+
+      'theme.default.name': 'PREDETERMINADO', 'theme.default.hint': 'Desbloqueado desde el inicio',
+      'theme.vaporwave.hint': 'Termina tu primera canción',
+      'theme.matrix.hint': 'Alcanza un combo de 100+',
+      'theme.bloodmoon.name': 'LUNA DE SANGRE', 'theme.bloodmoon.hint': 'Termina una canción en DEMENCIAL 1.5×',
+      'theme.goldenhour.name': 'HORA DORADA', 'theme.goldenhour.hint': '95%+ de perfect en una canción terminada',
+      'theme.frost.name': 'ESCARCHA', 'theme.frost.hint': 'Desbloquea el logro DIEZ PERFECTOS',
+      'theme.sunset.name': 'ATARDECER', 'theme.sunset.hint': 'Termina una canción con RUSH 1.25×',
+      'theme.inferno.name': 'INFIERNO', 'theme.inferno.hint': 'Desbloquea el logro NERVIOS DE ACERO',
+      'theme.cyberpunk.hint': 'Desbloquea el logro TEORÍA DEL CAOS',
+      'theme.emerald.name': 'ESMERALDA', 'theme.emerald.hint': 'Desbloquea el logro ARCHIVERO',
+      'theme.nebula.name': 'NEBULOSA', 'theme.nebula.hint': 'Desbloquea el logro LEYENDA INFINITA',
+      'theme.arcade.hint': 'Desbloquea el logro HACERSE PÚBLICO',
+      'theme.abyss.name': 'ABISMO', 'theme.abyss.hint': 'Desbloquea el logro PIERNAS DE HIERRO',
+      'theme.noir.hint': 'Desbloquea el logro BÚHO NOCTURNO',
+
+      'skin.classic.name': 'CLÁSICO', 'skin.star.name': 'ESTRELLA', 'skin.comet.name': 'COMETA',
+      'skin.smiley.name': 'CARITA', 'skin.diamond.name': 'DIAMANTE', 'skin.phantom.name': 'FANTASMA',
+      'skin.galaxy.name': 'GALAXIA', 'skin.crystal.name': 'CRISTAL', 'skin.circuit.name': 'CIRCUITO',
+      'skin.yinyang.name': 'YIN YANG',
+
+      'trail.classic.name': 'CLÁSICO', 'trail.none.name': 'NINGUNO', 'trail.rainbow.name': 'ARCOÍRIS',
+      'trail.fire.name': 'FUEGO', 'trail.ribbon.name': 'CINTA', 'trail.sparkle.name': 'DESTELLO',
+      'trail.bubbles.name': 'BURBUJAS', 'trail.smoke.name': 'HUMO', 'trail.electric.name': 'ELÉCTRICO',
+      'trail.petals.name': 'PÉTALOS',
+
+      'cosmetic.tapToSelect': 'TOCA PARA SELECCIONAR', 'cosmetic.fromStart': 'Desbloqueado desde el inicio',
+      'cosmetic.unlockVia': 'Desbloquea con {name}', 'trail.none.hint': 'Sin estela – aspecto limpio',
+    },
+
+    fr: {
+      'mod.slowed.name': 'RALENTI + REVERB \u{1F317}', 'mod.slowed.desc': "Morceau à 0,8× avec réverb onirique et brume violette",
+      'mod.autoJump.name': 'AUTO-REBOND', 'mod.autoJump.desc': "La bille atterrit parfaitement sur chaque pic automatiquement – profite",
+      'mod.noFail.name': 'SANS ÉCHEC', 'mod.noFail.desc': "Les coups ne redémarrent jamais, ils réinitialisent juste le combo",
+      'mod.widerWindows.name': 'FENÊTRES LARGES', 'mod.widerWindows.desc': 'Perfect ±180 ms, Good ±280 ms',
+      'mod.rush.name': 'RUSH 1.25×', 'mod.rush.desc': 'Morceau à 1,25× de vitesse',
+      'mod.insane.name': 'DÉMENT 1.5×', 'mod.insane.desc': 'Morceau à 1,5× de vitesse',
+      'mod.bpmOnly.name': 'BPM SEUL', 'mod.bpmOnly.desc': 'Musique coupée – métronome synthétique uniquement',
+      'mod.blindRing.name': 'ANNEAU AVEUGLE', 'mod.blindRing.desc': "Pas d'anneau de métronome – à l'oreille seulement",
+      'mod.suddenDeath.name': 'MORT SUBITE', 'mod.suddenDeath.desc': '1 coup = redémarrage au checkpoint',
+      'mod.ghostDot.name': 'POINT FANTÔME', 'mod.ghostDot.desc': "Le point devient presque invisible en l'air",
+
+      'ach.firstSteps.name': 'PREMIERS PAS', 'ach.firstSteps.hint': 'Termine ton premier morceau',
+      'ach.flawless.name': 'IMPECCABLE', 'ach.flawless.hint': 'Termine un morceau avec 100% perfect',
+      'ach.dropSurvivor.name': 'SURVIVANT DU DROP', 'ach.dropSurvivor.hint': 'Passe une section de drop entière sans coup',
+      'ach.blindFaith.name': 'FOI AVEUGLE', 'ach.blindFaith.hint': 'Termine un morceau avec ANNEAU AVEUGLE',
+      'ach.marathon.name': 'MARATHON', 'ach.marathon.hint': 'Saute 1000 fois (au total)',
+      'ach.speedDemon.name': 'DÉMON DE VITESSE', 'ach.speedDemon.hint': 'Termine un morceau en DÉMENT 1.5×',
+      'ach.comboKing.name': 'ROI DU COMBO', 'ach.comboKing.hint': 'Atteins un combo de 200',
+      'ach.collector.name': 'COLLECTIONNEUR', 'ach.collector.hint': 'Débloque tous les thèmes',
+      'ach.nightShift.name': 'ÉQUIPE DE NUIT', 'ach.nightShift.hint': 'Joue 10 morceaux au total',
+      'ach.perfectTen.name': 'DIX PARFAITS', 'ach.perfectTen.hint': "Obtiens 10 perfect d'affilée, 5 fois dans un morceau",
+      'ach.centurion.name': 'CENTURION', 'ach.centurion.hint': 'Atteins un combo de 100',
+      'ach.suddenDeathSurvivor.name': "NERFS D'ACIER", 'ach.suddenDeathSurvivor.hint': 'Termine un morceau avec MORT SUBITE',
+      'ach.bpmPurist.name': 'RYTHME PUR', 'ach.bpmPurist.hint': 'Termine un morceau avec BPM SEUL',
+      'ach.ghostBuster.name': 'CHASSEUR DE FANTÔMES', 'ach.ghostBuster.hint': 'Bats ton fantôme avec POINT FANTÔME',
+      'ach.dedication.name': 'DÉVOUEMENT', 'ach.dedication.hint': 'Joue 1 heure au total',
+      'ach.ironLegs.name': 'JAMBES DE FER', 'ach.ironLegs.hint': 'Saute 5000 fois (au total)',
+      'ach.veteran.name': 'VÉTÉRAN', 'ach.veteran.hint': 'Joue 50 morceaux au total',
+      'ach.legendary.name': 'LÉGENDAIRE', 'ach.legendary.hint': 'Atteins un combo de 500',
+      'ach.chaosTheory.name': 'THÉORIE DU CHAOS', 'ach.chaosTheory.hint': 'Utilise 5 modificateurs différents (au total)',
+      'ach.gluttonForPunishment.name': 'GLOUTON DE PUNITION', 'ach.gluttonForPunishment.hint': 'Termine un morceau avec 3+ modificateurs difficiles actifs',
+      'ach.archivist.name': 'ARCHIVISTE', 'ach.archivist.hint': 'Sauvegarde 8 morceaux dans ta bibliothèque',
+      'ach.goingPublic.name': 'RENDRE PUBLIC', 'ach.goingPublic.hint': 'Publie un niveau dans la Bibliothèque publique',
+      'ach.endlessLegend.name': 'LÉGENDE INFINIE', 'ach.endlessLegend.hint': 'Survis à 5 morceaux dans une partie Infinie',
+      'ach.nightOwl.name': 'OISEAU DE NUIT', 'ach.nightOwl.hint': 'Termine un morceau entre minuit et 5h',
+
+      'theme.default.name': 'PAR DÉFAUT', 'theme.default.hint': 'Débloqué dès le départ',
+      'theme.vaporwave.hint': 'Termine ton premier morceau',
+      'theme.matrix.hint': 'Atteins un combo de 100+',
+      'theme.bloodmoon.name': 'LUNE DE SANG', 'theme.bloodmoon.hint': 'Termine un morceau en DÉMENT 1.5×',
+      'theme.goldenhour.name': 'HEURE DORÉE', 'theme.goldenhour.hint': '95%+ de perfect sur un morceau terminé',
+      'theme.frost.name': 'GIVRE', 'theme.frost.hint': 'Débloque le succès DIX PARFAITS',
+      'theme.sunset.name': 'COUCHER DE SOLEIL', 'theme.sunset.hint': 'Termine un morceau avec RUSH 1.25×',
+      'theme.inferno.hint': "Débloque le succès NERFS D'ACIER",
+      'theme.cyberpunk.hint': 'Débloque le succès THÉORIE DU CHAOS',
+      'theme.emerald.name': 'ÉMERAUDE', 'theme.emerald.hint': 'Débloque le succès ARCHIVISTE',
+      'theme.nebula.name': 'NÉBULEUSE', 'theme.nebula.hint': 'Débloque le succès LÉGENDE INFINIE',
+      'theme.arcade.hint': 'Débloque le succès RENDRE PUBLIC',
+      'theme.abyss.name': 'ABÎME', 'theme.abyss.hint': 'Débloque le succès JAMBES DE FER',
+      'theme.noir.hint': 'Débloque le succès OISEAU DE NUIT',
+
+      'skin.classic.name': 'CLASSIQUE', 'skin.star.name': 'ÉTOILE', 'skin.comet.name': 'COMÈTE',
+      'skin.smiley.name': 'SMILEY', 'skin.diamond.name': 'DIAMANT', 'skin.phantom.name': 'FANTÔME',
+      'skin.galaxy.name': 'GALAXIE', 'skin.crystal.name': 'CRISTAL', 'skin.circuit.name': 'CIRCUIT',
+      'skin.yinyang.name': 'YIN YANG',
+
+      'trail.classic.name': 'CLASSIQUE', 'trail.none.name': 'AUCUNE', 'trail.rainbow.name': 'ARC-EN-CIEL',
+      'trail.fire.name': 'FEU', 'trail.ribbon.name': 'RUBAN', 'trail.sparkle.name': 'ÉTINCELLE',
+      'trail.bubbles.name': 'BULLES', 'trail.smoke.name': 'FUMÉE', 'trail.electric.name': 'ÉLECTRIQUE',
+      'trail.petals.name': 'PÉTALES',
+
+      'cosmetic.tapToSelect': 'TOUCHE POUR CHOISIR', 'cosmetic.fromStart': 'Débloqué dès le départ',
+      'cosmetic.unlockVia': 'Débloquer via {name}', 'trail.none.hint': 'Pas de traînée – look épuré',
+    },
+
+    pl: {
+      'mod.slowed.name': 'ZWOLNIONE + REVERB \u{1F317}', 'mod.slowed.desc': 'Utwór z prędkością 0,8× z marzycielskim pogłosem i fioletową mgłą',
+      'mod.autoJump.name': 'AUTO-ODBICIE', 'mod.autoJump.desc': 'Kulka automatycznie ląduje idealnie na każdym kolcu – po prostu się ciesz',
+      'mod.noFail.name': 'BEZ PORAŻKI', 'mod.noFail.desc': 'Trafienia nigdy nie restartują, tylko zerują combo',
+      'mod.widerWindows.name': 'SZERSZE OKNA', 'mod.widerWindows.desc': 'Perfect ±180 ms, Good ±280 ms',
+      'mod.rush.name': 'RUSH 1.25×', 'mod.rush.desc': 'Utwór z prędkością 1,25×',
+      'mod.insane.name': 'SZALONE 1.5×', 'mod.insane.desc': 'Utwór z prędkością 1,5×',
+      'mod.bpmOnly.name': 'TYLKO BPM', 'mod.bpmOnly.desc': 'Muzyka wyciszona – tylko syntetyczny metronom',
+      'mod.blindRing.name': 'ŚLEPY PIERŚCIEŃ', 'mod.blindRing.desc': 'Bez pomocniczego pierścienia metronomu – tylko słuch',
+      'mod.suddenDeath.name': 'NAGŁA ŚMIERĆ', 'mod.suddenDeath.desc': '1 trafienie = restart od punktu kontrolnego',
+      'mod.ghostDot.name': 'KULKA WIDMO', 'mod.ghostDot.desc': 'Kulka niemal znika w powietrzu',
+
+      'ach.firstSteps.name': 'PIERWSZE KROKI', 'ach.firstSteps.hint': 'Ukończ swój pierwszy utwór',
+      'ach.flawless.name': 'BEZBŁĘDNIE', 'ach.flawless.hint': 'Ukończ utwór ze 100% perfect',
+      'ach.dropSurvivor.name': 'OCALAŁY Z DROPU', 'ach.dropSurvivor.hint': 'Przejdź całą sekcję dropu bez trafienia',
+      'ach.blindFaith.name': 'ŚLEPA WIARA', 'ach.blindFaith.hint': 'Ukończ utwór z włączonym ŚLEPYM PIERŚCIENIEM',
+      'ach.marathon.name': 'MARATON', 'ach.marathon.hint': 'Skocz 1000 razy (łącznie)',
+      'ach.speedDemon.name': 'DEMON SZYBKOŚCI', 'ach.speedDemon.hint': 'Ukończ utwór na SZALONE 1.5×',
+      'ach.comboKing.name': 'KRÓL COMBO', 'ach.comboKing.hint': 'Osiągnij combo 200',
+      'ach.collector.name': 'KOLEKCJONER', 'ach.collector.hint': 'Odblokuj wszystkie motywy',
+      'ach.nightShift.name': 'NOCNA ZMIANA', 'ach.nightShift.hint': 'Zagraj łącznie 10 utworów',
+      'ach.perfectTen.name': 'PERFEKCYJNA DZIESIĄTKA', 'ach.perfectTen.hint': 'Zdobądź 10 perfect z rzędu, 5 razy w jednym utworze',
+      'ach.centurion.name': 'CENTURION', 'ach.centurion.hint': 'Osiągnij combo 100',
+      'ach.suddenDeathSurvivor.name': 'STALOWE NERWY', 'ach.suddenDeathSurvivor.hint': 'Ukończ utwór z NAGŁĄ ŚMIERCIĄ',
+      'ach.bpmPurist.name': 'CZYSTY RYTM', 'ach.bpmPurist.hint': 'Ukończ utwór z TYLKO BPM',
+      'ach.ghostBuster.name': 'POGROMCA DUCHÓW', 'ach.ghostBuster.hint': 'Pokonaj swojego ducha z KULKĄ WIDMO',
+      'ach.dedication.name': 'ODDANIE', 'ach.dedication.hint': 'Graj łącznie 1 godzinę',
+      'ach.ironLegs.name': 'ŻELAZNE NOGI', 'ach.ironLegs.hint': 'Skocz 5000 razy (łącznie)',
+      'ach.veteran.name': 'WETERAN', 'ach.veteran.hint': 'Zagraj łącznie 50 utworów',
+      'ach.legendary.name': 'LEGENDARNIE', 'ach.legendary.hint': 'Osiągnij combo 500',
+      'ach.chaosTheory.name': 'TEORIA CHAOSU', 'ach.chaosTheory.hint': 'Użyj 5 różnych modyfikatorów (łącznie)',
+      'ach.gluttonForPunishment.name': 'ŻĄDNY KARY', 'ach.gluttonForPunishment.hint': 'Ukończ utwór z 3+ aktywnymi trudnymi modyfikatorami',
+      'ach.archivist.name': 'ARCHIWISTA', 'ach.archivist.hint': 'Zapisz 8 utworów w bibliotece',
+      'ach.goingPublic.name': 'WYJŚCIE NA ŚWIATŁO', 'ach.goingPublic.hint': 'Opublikuj poziom w Bibliotece Publicznej',
+      'ach.endlessLegend.name': 'NIEKOŃCZĄCA SIĘ LEGENDA', 'ach.endlessLegend.hint': 'Przetrwaj 5 utworów w jednym biegu Nieskończonym',
+      'ach.nightOwl.name': 'NOCNY MAREK', 'ach.nightOwl.hint': 'Ukończ utwór między północą a 5 rano',
+
+      'theme.default.name': 'DOMYŚLNY', 'theme.default.hint': 'Odblokowane od początku',
+      'theme.vaporwave.hint': 'Ukończ swój pierwszy utwór',
+      'theme.matrix.hint': 'Osiągnij combo 100+',
+      'theme.bloodmoon.name': 'KRWAWY KSIĘŻYC', 'theme.bloodmoon.hint': 'Ukończ utwór na SZALONE 1.5×',
+      'theme.goldenhour.name': 'ZŁOTA GODZINA', 'theme.goldenhour.hint': '95%+ perfect w ukończonym utworze',
+      'theme.frost.name': 'SZRON', 'theme.frost.hint': 'Odblokuj osiągnięcie PERFEKCYJNA DZIESIĄTKA',
+      'theme.sunset.name': 'ZACHÓD SŁOŃCA', 'theme.sunset.hint': 'Ukończ utwór z RUSH 1.25×',
+      'theme.inferno.hint': 'Odblokuj osiągnięcie STALOWE NERWY',
+      'theme.cyberpunk.hint': 'Odblokuj osiągnięcie TEORIA CHAOSU',
+      'theme.emerald.name': 'SZMARAGD', 'theme.emerald.hint': 'Odblokuj osiągnięcie ARCHIWISTA',
+      'theme.nebula.name': 'MGŁAWICA', 'theme.nebula.hint': 'Odblokuj osiągnięcie NIEKOŃCZĄCA SIĘ LEGENDA',
+      'theme.arcade.hint': 'Odblokuj osiągnięcie WYJŚCIE NA ŚWIATŁO',
+      'theme.abyss.name': 'OTCHŁAŃ', 'theme.abyss.hint': 'Odblokuj osiągnięcie ŻELAZNE NOGI',
+      'theme.noir.hint': 'Odblokuj osiągnięcie NOCNY MAREK',
+
+      'skin.classic.name': 'KLASYCZNY', 'skin.star.name': 'GWIAZDA', 'skin.comet.name': 'KOMETA',
+      'skin.smiley.name': 'BUŹKA', 'skin.diamond.name': 'DIAMENT', 'skin.phantom.name': 'FANTOM',
+      'skin.galaxy.name': 'GALAKTYKA', 'skin.crystal.name': 'KRYSZTAŁ', 'skin.circuit.name': 'OBWÓD',
+      'skin.yinyang.name': 'YIN YANG',
+
+      'trail.classic.name': 'KLASYCZNY', 'trail.none.name': 'BRAK', 'trail.rainbow.name': 'TĘCZA',
+      'trail.fire.name': 'OGIEŃ', 'trail.ribbon.name': 'WSTĄŻKA', 'trail.sparkle.name': 'ISKRA',
+      'trail.bubbles.name': 'BĄBELKI', 'trail.smoke.name': 'DYM', 'trail.electric.name': 'ELEKTRYCZNY',
+      'trail.petals.name': 'PŁATKI',
+
+      'cosmetic.tapToSelect': 'DOTKNIJ, ABY WYBRAĆ', 'cosmetic.fromStart': 'Odblokowane od początku',
+      'cosmetic.unlockVia': 'Odblokuj przez {name}', 'trail.none.hint': 'Bez śladu – czysty wygląd',
+    },
+  };
+
+  for (const loc of Object.keys(CONTENT_STRINGS)) {
+    STRINGS[loc] = Object.assign(STRINGS[loc] || {}, CONTENT_STRINGS[loc]);
+  }
+
   let locale = 'en';
 
   function detectLocale() {
@@ -1314,10 +1736,44 @@ const I18N = (() => {
     return locale;
   }
 
-  function setLocale(loc) {
+  function setLocale(loc, persist) {
     locale = LOCALES.includes(loc) ? loc : 'en';
-    if (window.Storage) Storage.setSetting('language', locale);
+    // persist defaults to true; auto-detection passes false so the user's
+    // OS language keeps driving the choice until they pick one explicitly.
+    if (persist !== false && window.Storage) Storage.setSetting('language', locale);
     applyStaticTranslations();
+  }
+
+  /**
+   * Best-effort: when running natively under Capacitor, ask the Device
+   * plugin for the real OS language and switch to it IF the user has never
+   * picked a language manually. No-ops gracefully if the plugin isn't
+   * installed (web build, or native build without @capacitor/device), in
+   * which case navigator-based detection in init() already applied. The
+   * result is NOT persisted, so the app keeps following the OS language.
+   */
+  async function applySystemLocale() {
+    try {
+      if (window.Storage && Storage.getSettings().language) return; // user chose - respect it
+      const Device = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Device;
+      if (!Device || typeof Device.getLanguageCode !== 'function') return;
+      const res = await Device.getLanguageCode();
+      const short = String((res && res.value) || '').slice(0, 2).toLowerCase();
+      if (LOCALES.includes(short) && short !== locale) setLocale(short, false);
+    } catch (e) { /* ignore - navigator fallback already ran */ }
+  }
+
+  // ---- dynamic content lookups (modifiers / achievements / cosmetics) ----
+  // `field` is one of name / desc / hint; falls back to the English string
+  // baked into the def object so untranslated content still reads naturally.
+  function content(prefix, id, field, fallback) {
+    return t(prefix + '.' + id + '.' + field, null, fallback);
+  }
+
+  /** Localized "Unlock via {achievement}" line for gated skins/trails. */
+  function unlockHint(achId, achNameFallback) {
+    const achName = content('ach', achId, 'name', achNameFallback || achId);
+    return t('cosmetic.unlockVia', { name: achName }, 'Unlock via ' + achName);
   }
 
   /** Looks up `key` in the active locale, falling back to English, then `fallback`, then the key itself. Supports {var} substitution. */
@@ -1352,7 +1808,12 @@ const I18N = (() => {
     const saved = window.Storage ? Storage.getSettings().language : null;
     locale = (saved && LOCALES.includes(saved)) ? saved : detectLocale();
     applyStaticTranslations();
+    // refine with the native OS language when available (async, best-effort)
+    applySystemLocale();
   }
 
-  return { init, t, getLocale, setLocale, applyStaticTranslations, LOCALES, LANG_NAMES };
+  return {
+    init, t, content, unlockHint, getLocale, setLocale, applySystemLocale,
+    applyStaticTranslations, LOCALES, LANG_NAMES,
+  };
 })();

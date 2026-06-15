@@ -73,7 +73,7 @@ const UI = (() => {
       const def = defs.find(d => d.id === id);
       if (!def) return;
       setTimeout(() => {
-        showToast(def.name, { achievement: true, icon: def.icon, duration: 3800 });
+        showToast(I18N.content('ach', def.id, 'name', def.name), { achievement: true, icon: def.icon, duration: 3800 });
         Haptics.achievementUnlock();
       }, i * 900);
     });
@@ -83,7 +83,7 @@ const UI = (() => {
     const defs = Storage.getThemeDefs();
     const def = defs.find(d => d.id === themeId);
     if (!def) return;
-    $('theme-unlock-name').textContent = def.name;
+    $('theme-unlock-name').textContent = I18N.content('theme', def.id, 'name', def.name);
     const overlay = $('theme-unlock-overlay');
     overlay.classList.remove('hidden');
     Haptics.themeUnlock();
@@ -534,10 +534,10 @@ const UI = (() => {
       info.className = 'modifier-info';
       const name = document.createElement('div');
       name.className = 'modifier-name';
-      name.textContent = def.name;
+      name.textContent = I18N.content('mod', def.id, 'name', def.name);
       const desc = document.createElement('div');
       desc.className = 'modifier-mult';
-      desc.textContent = `${def.desc} (×${def.mult})`;
+      desc.textContent = `${I18N.content('mod', def.id, 'desc', def.desc)} (×${def.mult})`;
       info.appendChild(name); info.appendChild(desc);
 
       const sw = document.createElement('div');
@@ -894,6 +894,20 @@ const UI = (() => {
   }
 
   // ---------------- themes & skins ----------------
+  // localized "TAP TO SELECT" used across the cosmetic grids
+  function tapToSelect() { return I18N.t('cosmetic.tapToSelect', null, 'TAP TO SELECT'); }
+
+  // localized unlock hint for a gated skin/trail, composed from the required
+  // achievement's localized name; classic/none fall back to their own copy.
+  function cosmeticLockHint(category, def) {
+    if (category === 'trail' && def.id === 'none') return I18N.t('trail.none.hint', null, def.hint);
+    const map = category === 'skin' ? Storage.SKIN_UNLOCK_ACHIEVEMENT : Storage.TRAIL_UNLOCK_ACHIEVEMENT;
+    const reqAch = map && map[def.id];
+    if (!reqAch) return I18N.t('cosmetic.fromStart', null, def.hint); // classic
+    const achDef = Storage.getAchievementDefs().find(a => a.id === reqAch);
+    return I18N.unlockHint(reqAch, achDef ? achDef.name : reqAch);
+  }
+
   function populateThemesSkins() {
     const settings = Storage.getSettings();
 
@@ -906,9 +920,9 @@ const UI = (() => {
       const swatch = document.createElement('div');
       swatch.className = 'item-swatch';
       swatch.style.background = THEME_SWATCH[def.id] || '#ffffff';
-      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = def.name;
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = I18N.content('theme', def.id, 'name', def.name);
       const hint = document.createElement('div'); hint.className = 'item-hint';
-      hint.textContent = unlocked ? 'TAP TO SELECT' : def.hint;
+      hint.textContent = unlocked ? tapToSelect() : I18N.content('theme', def.id, 'hint', def.hint);
       item.appendChild(swatch); item.appendChild(name); item.appendChild(hint);
       if (unlocked) {
         item.addEventListener('click', () => {
@@ -931,9 +945,9 @@ const UI = (() => {
       canvas.className = 'item-swatch';
       canvas.style.background = 'transparent';
       drawSkinPreview(canvas, def.id);
-      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = def.name;
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = I18N.content('skin', def.id, 'name', def.name);
       const hint = document.createElement('div'); hint.className = 'item-hint';
-      hint.textContent = unlocked ? 'TAP TO SELECT' : def.hint;
+      hint.textContent = unlocked ? tapToSelect() : cosmeticLockHint('skin', def);
       item.appendChild(canvas); item.appendChild(name); item.appendChild(hint);
       if (unlocked) {
         item.addEventListener('click', () => {
@@ -955,9 +969,9 @@ const UI = (() => {
       canvas.className = 'item-swatch trail-swatch';
       canvas.style.background = 'transparent';
       drawTrailPreview(canvas, def.id);
-      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = def.name;
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = I18N.content('trail', def.id, 'name', def.name);
       const hint = document.createElement('div'); hint.className = 'item-hint';
-      hint.textContent = unlocked ? 'TAP TO SELECT' : def.hint;
+      hint.textContent = unlocked ? tapToSelect() : cosmeticLockHint('trail', def);
       item.appendChild(canvas); item.appendChild(name); item.appendChild(hint);
       if (unlocked) {
         item.addEventListener('click', () => {
@@ -1069,8 +1083,8 @@ const UI = (() => {
       item.className = 'grid-item' + (unlocked ? '' : ' locked');
       const icon = document.createElement('div'); icon.className = 'ach-icon'; icon.textContent = def.icon;
       const body = document.createElement('div'); body.className = 'ach-body';
-      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = def.name;
-      const hint = document.createElement('div'); hint.className = 'item-hint'; hint.textContent = def.hint;
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = I18N.content('ach', def.id, 'name', def.name);
+      const hint = document.createElement('div'); hint.className = 'item-hint'; hint.textContent = I18N.content('ach', def.id, 'hint', def.hint);
       body.appendChild(name); body.appendChild(hint);
       if (def.cumulative && !unlocked) {
         const progress = Storage.getAchievementProgress(def);
@@ -1113,7 +1127,7 @@ const UI = (() => {
       if (count > favCount) { favCount = count; favMod = id; }
     });
     const modDef = favMod ? Game.MODIFIER_DEFS.find(d => d.id === favMod) : null;
-    addStatRow(panel, 'FAVORITE MODIFIER', modDef ? modDef.name : '-');
+    addStatRow(panel, 'FAVORITE MODIFIER', modDef ? I18N.content('mod', modDef.id, 'name', modDef.name) : '-');
 
     drawStatsChart(stats.perfectRateHistory);
   }
