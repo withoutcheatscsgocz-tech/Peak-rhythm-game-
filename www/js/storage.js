@@ -121,7 +121,25 @@ const Storage = (() => {
     } catch (e) {
       data = defaultData();
     }
+    migrate();
     return data;
+  }
+
+  /**
+   * One-shot migrations for installs that persisted older defaults. The first
+   * build shipped Rhythm Focus at 70 (vocals-led), which feels loose; we now
+   * lock charts to the beat grid and lead with drums. Reset the saved value once
+   * so existing players get the tighter feel without touching any setting - they
+   * can still slide back toward vocals afterwards.
+   */
+  function migrate() {
+    let changed = false;
+    if (!data.settings.rhythmTightV2) {
+      data.settings.vocalFocus = 15;
+      data.settings.rhythmTightV2 = true;
+      changed = true;
+    }
+    if (changed) save();
   }
 
   function save() {

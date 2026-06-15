@@ -28,6 +28,38 @@ const Level = (() => {
   }
 
   /**
+   * Locks every obstacle onto the song's beat grid so the chart feels steady
+   * and "on the beat" by default. Raw onset times drift a few tens of ms off
+   * the pulse (and genuine syncopation lands between beats) - that looseness is
+   * exactly what makes a chart feel unsatisfying to tap. We snap each onset to
+   * the nearest EIGHTH-NOTE line derived from the detected BPM + phase, then keep
+   * only the strongest hit on each line. The result: the ball always bounces on
+   * a clean musical subdivision, no per-song tuning required.
+   *
+   * Robust to BPM octave errors - a half/double tempo grid is still a clean
+   * subdivision of the real one, so snapping stays musical either way.
+   */
+  function snapEventsToGrid(events, analysis) {
+    const bpm = analysis && analysis.bpm;
+    if (!bpm || !events || !events.length) return events;
+    const beatSec = 60 / bpm;
+    const subdiv = beatSec / 2; // eighth notes - steady but still allows off-beats
+    const phase = (((analysis.phase || 0) % beatSec) + beatSec) % beatSec;
+
+    const byLine = new Map();
+    for (const e of events) {
+      const k = Math.round((e.time - phase) / subdiv);
+      const snappedTime = phase + k * subdiv;
+      const prev = byLine.get(k);
+      // keep the strongest onset that landed on this grid line
+      if (!prev || (e.strength || 0) > (prev.strength || 0)) {
+        byLine.set(k, Object.assign({}, e, { time: snappedTime }));
+      }
+    }
+    return Array.from(byLine.values()).sort((a, b) => a.time - b.time);
+  }
+
+  /**
    * Generates the track from analyzed onset EVENTS (rhythm v3):
    *  - `analysis.events` are real audible hits in the song's dominant
    *    band (kicks/snares/vocal stabs), detected at their true times -
@@ -52,6 +84,9 @@ const Level = (() => {
         .map(b => ({ time: b.time, strength: b.bass != null ? b.bass : (b.energy || 0.5), section: b.section }));
       if (!events.length) events = beats.map(b => ({ time: b.time, strength: 0.5, section: b.section }));
     }
+
+    // lock every obstacle onto the beat grid so the rhythm stays tight and steady
+    events = snapEventsToGrid(events, analysis);
 
     // the song needs a moment to breathe before the first obstacle
     const playable = events.filter(e => e.time >= 1.0);
@@ -111,5 +146,5 @@ const Level = (() => {
     return checkpoints;
   }
 
-  return { generate, mulberry32, hashToSeed, buildCheckpoints };
+  return { generate, mulberry32, hashToSeed, buildCheckpoints, snapEventsToGrid };
 })();
