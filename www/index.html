@@ -16,41 +16,41 @@
 <!-- ====================== TOASTS / OVERLAYS ====================== -->
 <div id="toast-container"></div>
 <div id="theme-unlock-overlay" class="fullscreen-celebration hidden">
-  <div class="celebration-title">THEME UNLOCKED</div>
+  <div class="celebration-title" data-i18n="common.themeUnlocked">THEME UNLOCKED</div>
   <div class="celebration-name" id="theme-unlock-name"></div>
 </div>
 <div id="controller-toast" class="toast hidden">
-  <span class="gamepad-icon">&#127918;</span> CONTROLLER CONNECTED
+  <span class="gamepad-icon">&#127918;</span> <span data-i18n="common.controllerConnected">CONTROLLER CONNECTED</span>
 </div>
 
 <!-- ====================== START SCREEN ====================== -->
 <div id="screen-start" class="screen active">
   <div class="logo-wrap">
     <div class="logo" id="logo">ONE DOT</div>
-    <div class="subtitle">a rhythm game for your ears</div>
+    <div class="subtitle" data-i18n="start.subtitle">a rhythm game for your ears</div>
     <div class="heartbeat-dot" id="menu-heartbeat-dot"></div>
   </div>
   <div class="menu-buttons" id="start-menu">
-    <button class="btn focusable" data-action="tutorial" id="tutorial-btn">HOW TO PLAY</button>
-    <button class="btn focusable" data-action="upload-song">UPLOAD SONG</button>
-    <button class="btn focusable" data-action="upload-playlist">UPLOAD PLAYLIST</button>
-    <button class="btn focusable" data-action="endless-mode">ENDLESS</button>
-    <button class="btn focusable" data-action="pass-play">PASS &amp; PLAY</button>
-    <button class="btn focusable" data-action="enter-challenge">ENTER CHALLENGE CODE</button>
+    <button class="btn focusable" data-action="tutorial" id="tutorial-btn" data-i18n="start.tutorial">HOW TO PLAY</button>
+    <button class="btn focusable" data-action="upload-song" data-i18n="start.uploadSong">UPLOAD SONG</button>
+    <button class="btn focusable" data-action="upload-playlist" data-i18n="start.uploadPlaylist">UPLOAD PLAYLIST</button>
+    <button class="btn focusable" data-action="endless-mode" data-i18n="start.endless">ENDLESS</button>
+    <button class="btn focusable" data-action="pass-play" data-i18n="start.passPlay">PASS &amp; PLAY</button>
+    <button class="btn focusable" data-action="enter-challenge" data-i18n="start.enterChallenge">ENTER CHALLENGE CODE</button>
     <div class="menu-row">
-      <button class="btn small focusable" data-action="leaderboards">LEADERBOARDS</button>
-      <button class="btn small focusable" data-action="achievements">ACHIEVEMENTS</button>
+      <button class="btn small focusable" data-action="leaderboards" data-i18n="start.leaderboards">LEADERBOARDS</button>
+      <button class="btn small focusable" data-action="achievements" data-i18n="start.achievements">ACHIEVEMENTS</button>
     </div>
     <div class="menu-row">
-      <button class="btn small focusable" data-action="stats">STATS</button>
-      <button class="btn small focusable" data-action="themes">COSMETICS</button>
+      <button class="btn small focusable" data-action="stats" data-i18n="start.stats">STATS</button>
+      <button class="btn small focusable" data-action="themes" data-i18n="start.cosmetics">COSMETICS</button>
     </div>
     <div class="menu-row">
-      <button class="btn small focusable" data-action="library">SONG LIBRARY</button>
-      <button class="btn small focusable" data-action="public-library">PUBLIC LIBRARY</button>
+      <button class="btn small focusable" data-action="library" data-i18n="start.library">SONG LIBRARY</button>
+      <button class="btn small focusable" data-action="public-library" data-i18n="start.publicLibrary">PUBLIC LIBRARY</button>
     </div>
     <div class="menu-row">
-      <button class="btn small focusable" data-action="settings">SETTINGS</button>
+      <button class="btn small focusable" data-action="settings" data-i18n="start.settings">SETTINGS</button>
     </div>
   </div>
   <input type="file" id="file-input-song" accept="audio/*" style="display:none">
@@ -59,94 +59,106 @@
 
 <!-- ====================== HELP / WHERE TO GET MUSIC ====================== -->
 <div id="screen-help" class="screen">
-  <h2>WHERE TO GET MUSIC?</h2>
+  <h2 data-i18n="help.title">WHERE TO GET MUSIC?</h2>
   <div class="panel scroll-panel">
-    <p>ONE DOT works with any local audio file (MP3, WAV, OGG) on your device. Here are some great
+    <p data-i18n="help.intro">ONE DOT works with any local audio file (MP3, WAV, OGG) on your device. Here are some great
        legal ways to find music to play:</p>
     <ul>
-      <li><b>Royalty-free libraries</b> &mdash; sites like Free Music Archive or Pixabay Music
+      <li data-i18n-html="help.li1"><b>Royalty-free libraries</b> &mdash; sites like Free Music Archive or Pixabay Music
           offer tracks you can download and use freely.</li>
-      <li><b>Your own purchased music</b> &mdash; any DRM-free MP3s you've bought work great.</li>
-      <li><b>Your own recordings</b> &mdash; humming, beatboxing, or band recordings make for
+      <li data-i18n-html="help.li2"><b>Your own purchased music</b> &mdash; any DRM-free MP3s you've bought work great.</li>
+      <li data-i18n-html="help.li3"><b>Your own recordings</b> &mdash; humming, beatboxing, or band recordings make for
           fun, unpredictable levels!</li>
     </ul>
-    <p>Once you have a file on your device, just tap <b>UPLOAD SONG</b> and pick it.</p>
+    <p data-i18n-html="help.outro">Once you have a file on your device, just tap <b>UPLOAD SONG</b> and pick it.</p>
   </div>
-  <button class="btn focusable" data-action="back">BACK</button>
+  <button class="btn focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== SETTINGS ====================== -->
 <div id="screen-settings" class="screen">
-  <h2>SETTINGS</h2>
+  <h2 data-i18n="settings.title">SETTINGS</h2>
   <div class="panel">
     <label class="setting-row">
-      <span>Audio Latency Offset: <b id="latency-value">0ms</b></span>
+      <span data-i18n="settings.language">Language</span>
+      <select id="language-select" class="select-input focusable">
+        <option value="en">English</option>
+        <option value="cs">Čeština</option>
+        <option value="ru">Русский</option>
+        <option value="de">Deutsch</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="pl">Polski</option>
+      </select>
+    </label>
+    <label class="setting-row">
+      <span><span data-i18n="settings.latency">Audio Latency Offset:</span> <b id="latency-value">0ms</b></span>
       <input type="range" id="latency-slider" min="-300" max="300" step="5" value="0">
     </label>
     <label class="setting-row">
-      <span>Haptics</span>
+      <span data-i18n="settings.haptics">Haptics</span>
       <select id="haptics-select" class="select-input focusable">
-        <option value="off">OFF</option>
-        <option value="taps">TAPS ONLY</option>
-        <option value="full">FULL RHYTHM</option>
+        <option value="off" data-i18n="settings.hapticsOff">OFF</option>
+        <option value="taps" data-i18n="settings.hapticsTaps">TAPS ONLY</option>
+        <option value="full" data-i18n="settings.hapticsFull">FULL RHYTHM</option>
       </select>
     </label>
     <label class="setting-row">
-      <span>Instant Replay Capture</span>
+      <span data-i18n="settings.replay">Instant Replay Capture</span>
       <select id="replay-select" class="select-input focusable">
-        <option value="off">OFF</option>
-        <option value="on">ON</option>
+        <option value="off" data-i18n="settings.hapticsOff">OFF</option>
+        <option value="on" data-i18n="common.on">ON</option>
       </select>
     </label>
     <label class="setting-row">
-      <span>Debug Log (show crash details on screen)</span>
+      <span data-i18n="settings.debugLog">Debug Log (show crash details on screen)</span>
       <select id="debug-log-select" class="select-input focusable">
-        <option value="off">OFF</option>
-        <option value="on">ON</option>
+        <option value="off" data-i18n="settings.hapticsOff">OFF</option>
+        <option value="on" data-i18n="common.on">ON</option>
       </select>
     </label>
     <label class="setting-row">
-      <span>Tap Sound (perfect hits)</span>
+      <span data-i18n="settings.tapSound">Tap Sound (perfect hits)</span>
       <div class="setting-row-inline">
         <select id="tap-sound-select" class="select-input focusable">
-          <option value="hihat">HI-HAT</option>
-          <option value="clap">CLAP</option>
-          <option value="808">808</option>
-          <option value="laser">LASER</option>
+          <option value="hihat" data-i18n="settings.tapHihat">HI-HAT</option>
+          <option value="clap" data-i18n="settings.tapClap">CLAP</option>
+          <option value="808" data-i18n="settings.tap808">808</option>
+          <option value="laser" data-i18n="settings.tapLaser">LASER</option>
         </select>
-        <button class="btn ghost small focusable" data-action="tap-sound-preview">PREVIEW</button>
+        <button class="btn ghost small focusable" data-action="tap-sound-preview" data-i18n="settings.preview">PREVIEW</button>
       </div>
     </label>
     <label class="setting-row">
-      <span>Rhythm Guide (quiet tick on every beat)</span>
+      <span data-i18n="settings.rhythmGuide">Rhythm Guide (quiet tick on every beat)</span>
       <select id="rhythm-guide-select" class="select-input focusable">
-        <option value="auto">AUTO (first 3 plays)</option>
-        <option value="on">ON</option>
-        <option value="off">OFF</option>
+        <option value="auto" data-i18n="settings.guideAuto">AUTO (first 3 plays)</option>
+        <option value="on" data-i18n="common.on">ON</option>
+        <option value="off" data-i18n="settings.hapticsOff">OFF</option>
       </select>
     </label>
     <label class="setting-row">
-      <span>Player Name (shown on Public Library leaderboards)</span>
-      <input type="text" id="player-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234">
+      <span data-i18n="settings.playerName">Player Name (shown on Public Library leaderboards)</span>
+      <input type="text" id="player-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234" data-i18n-placeholder="settings.playerNamePlaceholder">
     </label>
     <label class="setting-row">
-      <span>Rhythm Focus: <b id="vocal-focus-value">BALANCED</b></span>
+      <span><span data-i18n="settings.rhythmFocus">Rhythm Focus:</span> <b id="vocal-focus-value">BALANCED</b></span>
       <input type="range" id="vocal-focus-slider" min="0" max="100" step="5" value="15">
     </label>
-    <p class="setting-hint">Higher = the ball follows vocals/melody more; lower = it follows drums/bass more. New songs only - re-upload to apply to a song you already analyzed.</p>
+    <p class="setting-hint" data-i18n="settings.rhythmFocusHint">Higher = the ball follows vocals/melody more; lower = it follows drums/bass more. New songs only - re-upload to apply to a song you already analyzed.</p>
   </div>
   <div class="panel">
-    <p>SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
-    <button class="btn focusable" data-action="sync-test">SYNC TEST (120 BPM)</button>
+    <p data-i18n="settings.syncTestHint">SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.</p>
+    <button class="btn focusable" data-action="sync-test" data-i18n="settings.syncTest">SYNC TEST (120 BPM)</button>
   </div>
-  <button class="btn focusable" data-action="back">BACK</button>
+  <button class="btn focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== DEBUG OVERLAY ====================== -->
 <div id="debug-overlay" class="debug-overlay hidden">
   <div class="debug-overlay-header">
-    <span>DEBUG LOG</span>
-    <button class="debug-overlay-close focusable" data-action="debug-log-clear">CLEAR</button>
+    <span data-i18n="debug.title">DEBUG LOG</span>
+    <button class="debug-overlay-close focusable" data-action="debug-log-clear" data-i18n="debug.clear">CLEAR</button>
     <button class="debug-overlay-close focusable" data-action="debug-log-close">×</button>
   </div>
   <div id="debug-overlay-body" class="debug-overlay-body"></div>
@@ -154,7 +166,7 @@
 
 <!-- ====================== UPLOAD / ANALYSIS PROGRESS ====================== -->
 <div id="screen-analyzing" class="screen">
-  <h2 id="analyzing-title">ANALYZING AUDIO...</h2>
+  <h2 id="analyzing-title" data-i18n="analyzing.title">ANALYZING AUDIO...</h2>
   <div class="progress-ring-wrap">
     <div class="progress-ring" id="analyze-ring"></div>
     <div class="progress-pct" id="analyze-pct">0%</div>
@@ -164,81 +176,81 @@
 
 <!-- ====================== ANALYSIS RESULT ====================== -->
 <div id="screen-result" class="screen">
-  <h2>TRACK READY</h2>
+  <h2 data-i18n="result.title">TRACK READY</h2>
   <div class="panel result-panel">
-    <div class="result-row"><span>SONG</span><b id="result-name">-</b></div>
-    <div class="result-row"><span>BPM</span><b id="result-bpm">-</b></div>
-    <div class="result-row"><span>LENGTH</span><b id="result-length">-</b></div>
-    <div class="result-row"><span>BEATS</span><b id="result-beats">-</b></div>
-    <div class="result-row"><span>INTENSITY</span><b id="result-intensity">-</b></div>
+    <div class="result-row"><span data-i18n="result.song">SONG</span><b id="result-name">-</b></div>
+    <div class="result-row"><span data-i18n="result.bpm">BPM</span><b id="result-bpm">-</b></div>
+    <div class="result-row"><span data-i18n="result.length">LENGTH</span><b id="result-length">-</b></div>
+    <div class="result-row"><span data-i18n="result.beats">BEATS</span><b id="result-beats">-</b></div>
+    <div class="result-row"><span data-i18n="result.intensity">INTENSITY</span><b id="result-intensity">-</b></div>
   </div>
   <div id="result-public-badge" class="public-level-badge hidden"></div>
-  <div id="result-weak-warning" class="weak-beat-warning hidden">
+  <div id="result-weak-warning" class="weak-beat-warning hidden" data-i18n="result.weakWarning">
     Weak beat detected — this song may not play well. Try the BEAT TUNER to adjust detection.
   </div>
   <canvas id="song-map-canvas" class="song-map-canvas"></canvas>
   <div class="song-map-legend">
-    <span><i class="legend-swatch" style="background:#ff5a3c"></i>DROP</span>
-    <span><i class="legend-swatch" style="background:#3cffb0"></i>BUILD</span>
-    <span><i class="legend-swatch" style="background:#6a8dff"></i>CHILL</span>
-    <span><i class="legend-swatch legend-cp"></i>CHECKPOINT</span>
-    <span><i class="legend-swatch" style="background:linear-gradient(90deg, rgba(70,70,80,0.5), #ff5ac8)"></i>VOCAL DENSITY</span>
+    <span><i class="legend-swatch" style="background:#ff5a3c"></i><span data-i18n="legend.drop">DROP</span></span>
+    <span><i class="legend-swatch" style="background:#3cffb0"></i><span data-i18n="legend.build">BUILD</span></span>
+    <span><i class="legend-swatch" style="background:#6a8dff"></i><span data-i18n="legend.chill">CHILL</span></span>
+    <span><i class="legend-swatch legend-cp"></i><span data-i18n="legend.checkpoint">CHECKPOINT</span></span>
+    <span><i class="legend-swatch" style="background:linear-gradient(90deg, rgba(70,70,80,0.5), #ff5ac8)"></i><span data-i18n="legend.vocalDensity">VOCAL DENSITY</span></span>
   </div>
   <div class="panel" id="publish-panel">
     <label class="setting-row">
-      <span>Publish this song + level so other players can play it on the Public Library leaderboard</span>
-      <input type="text" id="publish-title-input" class="text-input" maxlength="40" placeholder="LEVEL TITLE">
+      <span data-i18n="result.publish">Publish this song + level so other players can play it on the Public Library leaderboard</span>
+      <input type="text" id="publish-title-input" class="text-input" maxlength="40" placeholder="LEVEL TITLE" data-i18n-placeholder="result.publishTitlePlaceholder">
     </label>
     <div class="menu-row">
-      <button class="btn ghost focusable" data-action="publish-level" id="publish-btn">PUBLISH TO PUBLIC LIBRARY</button>
+      <button class="btn ghost focusable" data-action="publish-level" id="publish-btn" data-i18n="result.publishBtn">PUBLISH TO PUBLIC LIBRARY</button>
     </div>
     <div class="publish-status" id="publish-status"></div>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="beat-tuner" id="result-tuner-btn">BEAT TUNER</button>
-    <button class="btn focusable" data-action="to-modifiers">CONTINUE</button>
+    <button class="btn focusable" data-action="beat-tuner" id="result-tuner-btn" data-i18n="tuner.title">BEAT TUNER</button>
+    <button class="btn focusable" data-action="to-modifiers" data-i18n="result.continue">CONTINUE</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== BEAT TUNER ====================== -->
 <div id="screen-tuner" class="screen">
-  <h2>BEAT TUNER</h2>
+  <h2 data-i18n="tuner.title">BEAT TUNER</h2>
   <canvas id="tuner-canvas" class="tuner-canvas"></canvas>
 
   <div class="panel tuner-band tuner-band-bass">
     <div class="tuner-band-header">
-      <span class="tuner-band-label">BASS &rarr; SPIKES</span>
-      <button class="btn ghost small focusable" data-action="tuner-test-bass">TEST</button>
+      <span class="tuner-band-label" data-i18n-html="tuner.bassLabel">BASS &rarr; SPIKES</span>
+      <button class="btn ghost small focusable" data-action="tuner-test-bass" data-i18n="tuner.test">TEST</button>
     </div>
     <label class="setting-row">
-      <span>Sensitivity: <b id="tuner-bass-sens-val">1.30</b></span>
+      <span><span data-i18n="tuner.sensitivity">Sensitivity:</span> <b id="tuner-bass-sens-val">1.30</b></span>
       <input type="range" id="tuner-bass-sens" min="1.05" max="2.0" step="0.01" value="1.30">
     </label>
     <label class="setting-row">
-      <span>Min Spacing: <b id="tuner-bass-spacing-val">250ms</b></span>
+      <span><span data-i18n="tuner.minSpacing">Min Spacing:</span> <b id="tuner-bass-spacing-val">250ms</b></span>
       <input type="range" id="tuner-bass-spacing" min="100" max="600" step="10" value="250">
     </label>
   </div>
 
   <div class="menu-row">
-    <button class="btn focusable" data-action="tuner-preview">PREVIEW (10s)</button>
-    <button class="btn focusable" data-action="tuner-regenerate">REGENERATE LEVEL</button>
+    <button class="btn focusable" data-action="tuner-preview" data-i18n="tuner.preview">PREVIEW (10s)</button>
+    <button class="btn focusable" data-action="tuner-regenerate" data-i18n="tuner.regenerate">REGENERATE LEVEL</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== MODIFIERS ====================== -->
 <div id="screen-modifiers" class="screen">
-  <h2>MODIFIERS</h2>
+  <h2 data-i18n="modifiers.title">MODIFIERS</h2>
   <div class="panel scroll-panel" id="modifiers-list">
     <!-- generated by ui.js -->
   </div>
-  <div class="total-multiplier">TOTAL: <span id="total-mult">&times;1.0</span></div>
+  <div class="total-multiplier"><span data-i18n="modifiers.total">TOTAL:</span> <span id="total-mult">&times;1.0</span></div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="start-game">START</button>
+    <button class="btn focusable" data-action="start-game" data-i18n="modifiers.start">START</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== COUNTDOWN ====================== -->
@@ -250,7 +262,7 @@
 <div id="screen-pass-phone" class="screen">
   <div class="pass-title" id="pass-title">PASS TO PLAYER 2</div>
   <div class="pass-sub" id="pass-sub">READY?</div>
-  <button class="btn big focusable" data-action="pass-continue">TAP TO CONTINUE</button>
+  <button class="btn big focusable" data-action="pass-continue" data-i18n="pass.continue">TAP TO CONTINUE</button>
 </div>
 
 <!-- ====================== GAME HUD (overlay during play) ====================== -->
@@ -275,199 +287,199 @@
     </div>
   </div>
   <div class="replay-toast hidden" id="replay-toast">
-    <span>50+ PERFECT STREAK CAPTURED!</span>
-    <button class="btn small focusable" data-action="save-replay">SAVE REPLAY</button>
+    <span data-i18n="hud.replayToast">50+ PERFECT STREAK CAPTURED!</span>
+    <button class="btn small focusable" data-action="save-replay" data-i18n="hud.saveReplay">SAVE REPLAY</button>
   </div>
 </div>
 
 <!-- ====================== PAUSE MENU ====================== -->
 <div id="screen-pause" class="screen">
-  <h2>PAUSED</h2>
+  <h2 data-i18n="pause.title">PAUSED</h2>
   <div class="heartbeat-dot" id="pause-heartbeat-dot"></div>
   <div class="panel">
     <label class="setting-row">
-      <span>Audio Latency Offset: <b id="pause-latency-value">0ms</b></span>
+      <span><span data-i18n="settings.latency">Audio Latency Offset:</span> <b id="pause-latency-value">0ms</b></span>
       <input type="range" id="pause-latency-slider" min="-300" max="300" step="5" value="0">
     </label>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="resume">RESUME</button>
+    <button class="btn focusable" data-action="resume" data-i18n="pause.resume">RESUME</button>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="restart-checkpoint">RESTART FROM CHECKPOINT</button>
+    <button class="btn focusable" data-action="restart-checkpoint" data-i18n="pause.restartCheckpoint">RESTART FROM CHECKPOINT</button>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="beat-tuner">BEAT TUNER</button>
-    <button class="btn focusable" data-action="quit-to-menu">QUIT TO MENU</button>
+    <button class="btn focusable" data-action="beat-tuner" data-i18n="tuner.title">BEAT TUNER</button>
+    <button class="btn focusable" data-action="quit-to-menu" data-i18n="pause.quit">QUIT TO MENU</button>
   </div>
 </div>
 
 <!-- ====================== PRACTICE MODE ====================== -->
 <div id="screen-practice" class="screen">
-  <h2>PRACTICE MODE</h2>
-  <div class="practice-info" id="practice-info">Looping the section around your last hit at 0.6x speed</div>
+  <h2 data-i18n="practice.title">PRACTICE MODE</h2>
+  <div class="practice-info" id="practice-info" data-i18n="practice.info">Looping the section around your last hit at 0.6x speed</div>
   <div class="practice-feedback" id="practice-feedback"></div>
   <div class="practice-progress" id="practice-progress">PASSES: 0 / 3</div>
-  <button class="btn ghost focusable" data-action="practice-exit">EXIT PRACTICE</button>
+  <button class="btn ghost focusable" data-action="practice-exit" data-i18n="practice.exit">EXIT PRACTICE</button>
 </div>
 
 <!-- ====================== COMPLETE SCREEN ====================== -->
 <div id="screen-complete" class="screen">
-  <h2 id="complete-title">SONG COMPLETE</h2>
+  <h2 id="complete-title" data-i18n="complete.songComplete">SONG COMPLETE</h2>
   <div class="panel result-panel" id="complete-stats">
     <!-- generated -->
   </div>
   <canvas id="accuracy-graph" class="accuracy-graph hidden"></canvas>
   <div class="leaderboard-placement hidden" id="placement-banner"></div>
   <div class="panel scroll-panel hidden" id="global-leaderboard-panel">
-    <h3>GLOBAL LEADERBOARD</h3>
+    <h3 data-i18n="leaderboard.global">GLOBAL LEADERBOARD</h3>
     <label class="leaderboard-name-row">
-      <span>YOUR NAME</span>
-      <input type="text" id="global-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234">
+      <span data-i18n="leaderboard.yourName">YOUR NAME</span>
+      <input type="text" id="global-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234" data-i18n-placeholder="settings.playerNamePlaceholder">
     </label>
     <div id="global-leaderboard-list"></div>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="share-card">SHARE SCORE CARD</button>
-    <button class="btn focusable" data-action="get-challenge">CHALLENGE</button>
+    <button class="btn focusable" data-action="share-card" data-i18n="complete.share">SHARE SCORE CARD</button>
+    <button class="btn focusable" data-action="get-challenge" data-i18n="complete.challenge">CHALLENGE</button>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="practice-section">PRACTICE</button>
-    <button class="btn focusable" data-action="play-again">PLAY AGAIN</button>
+    <button class="btn focusable" data-action="practice-section" data-i18n="complete.practice">PRACTICE</button>
+    <button class="btn focusable" data-action="play-again" data-i18n="complete.playAgain">PLAY AGAIN</button>
   </div>
-  <button class="btn ghost focusable" data-action="back-to-start">MAIN MENU</button>
+  <button class="btn ghost focusable" data-action="back-to-start" data-i18n="common.mainMenu">MAIN MENU</button>
 </div>
 
 <!-- ====================== ENDLESS COMPLETE ====================== -->
 <div id="screen-endless-complete" class="screen">
-  <h2>RUN OVER</h2>
+  <h2 data-i18n="endless.runOver">RUN OVER</h2>
   <div class="panel result-panel" id="endless-stats"></div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="play-again-endless">RETRY</button>
+    <button class="btn focusable" data-action="play-again-endless" data-i18n="endless.retry">RETRY</button>
   </div>
-  <button class="btn ghost focusable" data-action="back-to-start">MAIN MENU</button>
+  <button class="btn ghost focusable" data-action="back-to-start" data-i18n="common.mainMenu">MAIN MENU</button>
 </div>
 
 <!-- ====================== PASS & PLAY RESULTS ====================== -->
 <div id="screen-multiplayer-complete" class="screen">
-  <h2>RESULTS</h2>
+  <h2 data-i18n="multiplayer.results">RESULTS</h2>
   <div class="podium" id="podium"></div>
   <div id="confetti-container"></div>
-  <button class="btn focusable" data-action="back-to-start">MAIN MENU</button>
+  <button class="btn focusable" data-action="back-to-start" data-i18n="common.mainMenu">MAIN MENU</button>
 </div>
 
 <!-- ====================== COSMETICS ====================== -->
 <div id="screen-themes" class="screen">
-  <h2>COSMETICS</h2>
-  <h3>THEME</h3>
+  <h2 data-i18n="cosmetics.title">COSMETICS</h2>
+  <h3 data-i18n="cosmetics.theme">THEME</h3>
   <div class="grid-list" id="theme-grid"></div>
-  <h3>DOT SKIN</h3>
+  <h3 data-i18n="cosmetics.skin">DOT SKIN</h3>
   <div class="grid-list" id="skin-grid"></div>
-  <h3>TRAIL</h3>
+  <h3 data-i18n="cosmetics.trail">TRAIL</h3>
   <div class="grid-list" id="trail-grid"></div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== ACHIEVEMENTS ====================== -->
 <div id="screen-achievements" class="screen">
-  <h2>ACHIEVEMENTS</h2>
+  <h2 data-i18n="achievements.title">ACHIEVEMENTS</h2>
   <div class="grid-list achievements-grid scroll-panel" id="achievements-grid"></div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== STATS DASHBOARD ====================== -->
 <div id="screen-stats" class="screen">
-  <h2>STATS</h2>
+  <h2 data-i18n="stats.title">STATS</h2>
   <div class="panel scroll-panel result-panel" id="stats-panel"></div>
   <canvas id="stats-chart" class="stats-chart"></canvas>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== LEADERBOARDS ====================== -->
 <div id="screen-leaderboards" class="screen">
-  <h2>LEADERBOARDS</h2>
+  <h2 data-i18n="leaderboards.title">LEADERBOARDS</h2>
   <div id="leaderboard-song-list" class="grid-list scroll-panel"></div>
   <div id="leaderboard-detail" class="panel scroll-panel hidden"></div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== SONG LIBRARY ====================== -->
 <div id="screen-library" class="screen">
-  <h2>SONG LIBRARY</h2>
-  <p class="library-hint">Cached analysis for songs you've played. Re-upload the same file and analysis will be skipped instantly.</p>
+  <h2 data-i18n="library.title">SONG LIBRARY</h2>
+  <p class="library-hint" data-i18n="library.hint">Cached analysis for songs you've played. Re-upload the same file and analysis will be skipped instantly.</p>
   <div id="library-song-list" class="grid-list library-list scroll-panel"></div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== PUBLIC LIBRARY ====================== -->
 <div id="screen-public-library" class="screen">
-  <h2>PUBLIC LIBRARY</h2>
-  <p class="library-hint">Songs and levels published by other players. Tap PLAY to download one and play it - your score goes on its global leaderboard.</p>
+  <h2 data-i18n="publicLibrary.title">PUBLIC LIBRARY</h2>
+  <p class="library-hint" data-i18n="publicLibrary.hint">Songs and levels published by other players. Tap PLAY to download one and play it - your score goes on its global leaderboard.</p>
   <div class="library-controls" id="public-library-controls">
-    <input type="text" id="public-search-input" class="text-input" placeholder="SEARCH TITLE / AUTHOR" autocomplete="off">
+    <input type="text" id="public-search-input" class="text-input" placeholder="SEARCH TITLE / AUTHOR" autocomplete="off" data-i18n-placeholder="publicLibrary.searchPlaceholder">
     <div class="library-controls-row">
       <select id="public-sort-select" class="select-input focusable">
-        <option value="newest">NEWEST</option>
-        <option value="played">MOST PLAYED</option>
-        <option value="rating">TOP RATED</option>
-        <option value="bpm-asc">BPM LOW→HIGH</option>
-        <option value="bpm-desc">BPM HIGH→LOW</option>
+        <option value="newest" data-i18n="publicLibrary.sortNewest">NEWEST</option>
+        <option value="played" data-i18n="publicLibrary.sortPlayed">MOST PLAYED</option>
+        <option value="rating" data-i18n="publicLibrary.sortRating">TOP RATED</option>
+        <option value="bpm-asc" data-i18n="publicLibrary.sortBpmAsc">BPM LOW→HIGH</option>
+        <option value="bpm-desc" data-i18n="publicLibrary.sortBpmDesc">BPM HIGH→LOW</option>
       </select>
-      <input type="number" id="public-bpm-min" class="text-input bpm-input" placeholder="MIN BPM" inputmode="numeric" min="0">
-      <input type="number" id="public-bpm-max" class="text-input bpm-input" placeholder="MAX BPM" inputmode="numeric" min="0">
+      <input type="number" id="public-bpm-min" class="text-input bpm-input" placeholder="MIN BPM" inputmode="numeric" min="0" data-i18n-placeholder="publicLibrary.minBpmPlaceholder">
+      <input type="number" id="public-bpm-max" class="text-input bpm-input" placeholder="MAX BPM" inputmode="numeric" min="0" data-i18n-placeholder="publicLibrary.maxBpmPlaceholder">
     </div>
   </div>
   <div id="public-library-list" class="grid-list library-list scroll-panel"></div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== CHALLENGE CODE ENTRY ====================== -->
 <div id="screen-challenge-enter" class="screen">
-  <h2>ENTER CHALLENGE CODE</h2>
+  <h2 data-i18n="challenge.title">ENTER CHALLENGE CODE</h2>
   <div class="panel">
-    <input type="text" id="challenge-code-input" class="text-input" placeholder="e.g. 3F9K2-A1B2C-12345" autocomplete="off" autocapitalize="characters">
+    <input type="text" id="challenge-code-input" class="text-input" placeholder="e.g. 3F9K2-A1B2C-12345" autocomplete="off" autocapitalize="characters" data-i18n-placeholder="challenge.placeholder">
     <div class="challenge-msg" id="challenge-msg"></div>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="submit-challenge">UPLOAD MATCHING SONG</button>
+    <button class="btn focusable" data-action="submit-challenge" data-i18n="challenge.submit">UPLOAD MATCHING SONG</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== ENDLESS / PLAYLIST SELECT ====================== -->
 <div id="screen-multi-select" class="screen">
-  <h2 id="multi-select-title">SELECT SONGS</h2>
-  <div class="panel" id="multi-select-info">Choose 2 or more audio files</div>
+  <h2 id="multi-select-title" data-i18n="multiSelect.title">SELECT SONGS</h2>
+  <div class="panel" id="multi-select-info" data-i18n="multiSelect.info">Choose 2 or more audio files</div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="multi-select-files">CHOOSE FILES</button>
+    <button class="btn focusable" data-action="multi-select-files" data-i18n="multiSelect.chooseFiles">CHOOSE FILES</button>
   </div>
   <div id="multi-select-list" class="grid-list scroll-panel"></div>
   <div class="menu-row">
-    <button class="btn focusable" id="multi-select-continue" data-action="multi-select-continue">CONTINUE</button>
+    <button class="btn focusable" id="multi-select-continue" data-action="multi-select-continue" data-i18n="multiSelect.continue">CONTINUE</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 <input type="file" id="file-input-multi" accept="audio/*" multiple style="display:none">
 
 <!-- ====================== PASS & PLAY SETUP ====================== -->
 <div id="screen-pass-setup" class="screen">
-  <h2>PASS &amp; PLAY SETUP</h2>
+  <h2 data-i18n="passSetup.title">PASS &amp; PLAY SETUP</h2>
   <div class="panel" id="pass-setup-players"></div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="pass-add-player">ADD PLAYER</button>
+    <button class="btn focusable" data-action="pass-add-player" data-i18n="passSetup.addPlayer">ADD PLAYER</button>
   </div>
   <div class="menu-row">
-    <button class="btn focusable" data-action="pass-setup-continue">CHOOSE SONG</button>
+    <button class="btn focusable" data-action="pass-setup-continue" data-i18n="passSetup.chooseSong">CHOOSE SONG</button>
   </div>
-  <button class="btn ghost focusable" data-action="back">BACK</button>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 
 <!-- ====================== PLAYLIST SUMMARY ====================== -->
 <div id="screen-playlist-summary" class="screen">
-  <h2>PLAYLIST COMPLETE</h2>
+  <h2 data-i18n="playlistSummary.title">PLAYLIST COMPLETE</h2>
   <div class="panel scroll-panel" id="playlist-summary-list"></div>
   <div class="panel result-panel" id="playlist-summary-total"></div>
-  <button class="btn focusable" data-action="back-to-start">MAIN MENU</button>
+  <button class="btn focusable" data-action="back-to-start" data-i18n="common.mainMenu">MAIN MENU</button>
 </div>
 
 <script src="js/vendor/capacitor-core.js"></script>
@@ -476,6 +488,7 @@
 <script src="js/vendor/capacitor-filesystem.js"></script>
 <script src="js/vendor/capacitor-share.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/cloud.js"></script>
 <script src="js/haptics.js"></script>
 <script src="js/audio.js"></script>

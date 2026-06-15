@@ -78,6 +78,7 @@ const App = (() => {
   // ---------------- bootstrap ----------------
   function init() {
     bindErrorHandlers();
+    I18N.init();
     Game.init($('game-canvas'), $('fx-canvas'));
     UI.init();
     UI.setHeartbeatRate('menu-heartbeat-dot', 1);
@@ -317,7 +318,7 @@ const App = (() => {
 
   // ---------------- file upload -> analysis -> result ----------------
   async function analyzeAndShowResult(file) {
-    $('analyzing-title').textContent = 'ANALYZING AUDIO...';
+    $('analyzing-title').textContent = I18N.t('analyzing.title');
     $('analyze-file-name').textContent = file.name;
     $('analyze-pct').textContent = '0%';
     UI.showScreen('screen-analyzing', false);
@@ -328,7 +329,7 @@ const App = (() => {
       let analysis, levelData;
       // analyses without `events` predate the rhythm-v3 pipeline - re-analyze
       if (cached && cached.analysis && cached.analysis.events && cached.analysis.events.length) {
-        $('analyzing-title').textContent = 'LOADED FROM LIBRARY';
+        $('analyzing-title').textContent = I18N.t('analyzing.loadedFromLibrary');
         $('analyze-pct').textContent = '100%';
         analysis = cached.analysis;
         levelData = Level.generate(analysis, hash);
@@ -492,7 +493,7 @@ const App = (() => {
   }
 
   async function playPublicLevel(level) {
-    $('analyzing-title').textContent = 'DOWNLOADING SONG...';
+    $('analyzing-title').textContent = I18N.t('analyzing.downloadingSong');
     $('analyze-file-name').textContent = level.title;
     $('analyze-pct').textContent = '';
     UI.showScreen('screen-analyzing', false);
@@ -633,8 +634,8 @@ const App = (() => {
 
   async function startTutorial() {
     UI.showScreen('screen-analyzing', false);
-    $('analyzing-title').textContent = 'PREPARING TUTORIAL...';
-    $('analyze-file-name').textContent = 'LESSON: BOUNCE ON THE BEAT';
+    $('analyzing-title').textContent = I18N.t('analyzing.preparingTutorial');
+    $('analyze-file-name').textContent = I18N.t('analyzing.lessonBounce');
     $('analyze-pct').textContent = '';
     try {
       const { buffer, analysis } = await AudioEngine.generateTutorialTrack();
@@ -666,8 +667,8 @@ const App = (() => {
   // ---------------- sync test mode (settings) ----------------
   async function startSyncTest() {
     UI.showScreen('screen-analyzing', false);
-    $('analyzing-title').textContent = 'PREPARING SYNC TEST...';
-    $('analyze-file-name').textContent = '120 BPM CLICK TRACK';
+    $('analyzing-title').textContent = I18N.t('analyzing.preparingSyncTest');
+    $('analyze-file-name').textContent = I18N.t('analyzing.clickTrack120');
     $('analyze-pct').textContent = '';
     try {
       const { buffer, analysis } = await AudioEngine.generateClickTrack();
@@ -778,7 +779,7 @@ const App = (() => {
     const settings = UI.readTunerSliders();
     settings.vocalFocus = Storage.getSettings().vocalFocus;
     Storage.setTunerSettings(current.songHash, settings);
-    $('analyzing-title').textContent = 'REGENERATING LEVEL...';
+    $('analyzing-title').textContent = I18N.t('analyzing.regeneratingLevel');
     $('analyze-file-name').textContent = current.songName || '';
     $('analyze-pct').textContent = '0%';
     UI.showScreen('screen-analyzing', false);
@@ -946,7 +947,7 @@ const App = (() => {
   function enterEndlessSetup() {
     current.mode = 'endless';
     endless = { queue: [], index: 0, carry: {}, songsSurvived: 0, totalTime: 0, modifiers: new Set() };
-    UI.initMultiSelect('ENDLESS MODE', 'Choose 2 or more audio files - they will play back to back');
+    UI.initMultiSelect(I18N.t('multiSelect.endlessTitle'), I18N.t('multiSelect.endlessInfo'));
     UI.showScreen('screen-multi-select');
   }
 
@@ -1033,7 +1034,7 @@ const App = (() => {
 
   function showPassPhoneForCurrentPlayer() {
     const player = multiplayer.players[multiplayer.index];
-    UI.showPassPhoneScreen(player.name, multiplayer.index === 0 ? 'GET READY!' : 'YOUR TURN!');
+    UI.showPassPhoneScreen(player.name, multiplayer.index === 0 ? I18N.t('pass.getReady') : I18N.t('pass.yourTurn'));
     UI.resetNav();
     UI.showScreen('screen-pass-phone', false);
   }
@@ -1066,7 +1067,7 @@ const App = (() => {
   function enterPlaylistSetup() {
     current.mode = 'playlist';
     playlist = { queue: [], index: 0, results: [], carry: {}, modifiers: new Set() };
-    UI.initMultiSelect('AUTO-DJ PLAYLIST', 'Choose songs to play back to back with crossfades');
+    UI.initMultiSelect(I18N.t('multiSelect.playlistTitle'), I18N.t('multiSelect.playlistInfo'));
     UI.showScreen('screen-multi-select');
   }
 

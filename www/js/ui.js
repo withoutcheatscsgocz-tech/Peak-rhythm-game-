@@ -140,11 +140,11 @@ const UI = (() => {
   // ---------------- settings screen ----------------
   /** Maps the 0-100 Rhythm Focus slider to a short descriptive label. */
   function vocalFocusLabel(v) {
-    if (v <= 10) return 'DRUMS ONLY';
-    if (v <= 35) return 'MOSTLY DRUMS';
-    if (v <= 65) return 'BALANCED';
-    if (v <= 90) return 'MOSTLY VOCALS';
-    return 'VOCALS ONLY';
+    if (v <= 10) return I18N.t('vocal.drumsOnly');
+    if (v <= 35) return I18N.t('vocal.mostlyDrums');
+    if (v <= 65) return I18N.t('vocal.balanced');
+    if (v <= 90) return I18N.t('vocal.mostlyVocals');
+    return I18N.t('vocal.vocalsOnly');
   }
 
   /** Syncs both latency sliders (settings + pause screen) to the stored value. */
@@ -222,6 +222,13 @@ const UI = (() => {
       const v = parseInt(vocalFocusSlider.value, 10);
       vocalFocusValue.textContent = vocalFocusLabel(v);
       Storage.setSetting('vocalFocus', v);
+    });
+
+    const languageSelect = $('language-select');
+    languageSelect.value = I18N.getLocale();
+    languageSelect.addEventListener('change', () => {
+      I18N.setLocale(languageSelect.value);
+      vocalFocusValue.textContent = vocalFocusLabel(parseInt(vocalFocusSlider.value, 10));
     });
 
     // pause screen mirrors the latency slider
@@ -650,7 +657,7 @@ const UI = (() => {
       const remaining = Math.max(0, state.remaining);
       const mins = Math.floor(remaining / 60);
       const secs = Math.floor(remaining % 60);
-      $('time-remaining').textContent = `${mins}:${secs < 10 ? '0' : ''}${secs} left`;
+      $('time-remaining').textContent = I18N.t('hud.timeRemaining', { time: `${mins}:${secs < 10 ? '0' : ''}${secs}` });
       $('time-remaining').style.opacity = (state.section === 'drop') ? '0.15' : '1';
     } else {
       $('song-progress-fill').style.width = '0%';
@@ -728,7 +735,7 @@ const UI = (() => {
     el.style.color = grade === 'perfect' ? '#ffffff' : '#aaaaaa';
   }
   function updatePracticeProgress(passes) {
-    $('practice-progress').textContent = `PASSES: ${Math.min(passes, 3)} / 3`;
+    $('practice-progress').textContent = I18N.t('practice.passes', { n: Math.min(passes, 3) });
   }
 
   // ---------------- complete screens ----------------
@@ -749,7 +756,7 @@ const UI = (() => {
   }
 
   function populateComplete(result, rankInfo) {
-    $('complete-title').textContent = result.finished ? 'SONG COMPLETE' : 'GAME OVER';
+    $('complete-title').textContent = result.finished ? I18N.t('complete.songComplete') : I18N.t('complete.gameOver');
     const stats = $('complete-stats');
     stats.innerHTML = '';
     const perfectRate = result.totalBeats ? (result.perfectCount / result.totalBeats * 100) : 0;
@@ -1407,8 +1414,8 @@ const UI = (() => {
 
   // ---------------- pass-the-phone screen ----------------
   function showPassPhoneScreen(playerName, subText) {
-    $('pass-title').textContent = `PASS TO ${playerName}`;
-    $('pass-sub').textContent = subText || 'READY?';
+    $('pass-title').textContent = I18N.t('pass.passTo', { name: playerName });
+    $('pass-sub').textContent = subText || I18N.t('pass.readyQ');
   }
 
   // ---------------- playlist summary ----------------
