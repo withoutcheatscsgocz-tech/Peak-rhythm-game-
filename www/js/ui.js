@@ -12,6 +12,7 @@ const UI = (() => {
   const THEME_SWATCH = {
     default: '#ffffff', vaporwave: '#ff8cf0', matrix: '#4dff7a', bloodmoon: '#ff4d4d', goldenhour: '#ffd24d',
     frost: '#b3f0ff', sunset: '#ff9a5a', inferno: '#ff6a00',
+    cyberpunk: '#00f0ff', emerald: '#3cff8a', nebula: '#b388ff', arcade: '#e6ff4d', abyss: '#4dd0ff', noir: '#e0e0e0',
   };
   const PLAYER_COLORS = ['#ffffff', '#ff5a3c', '#3cffb0', '#6a8dff'];
 
@@ -977,6 +978,42 @@ const UI = (() => {
           ctx.globalAlpha = (1 - f) * 0.85;
           ctx.fillStyle = i % 3 === 0 ? accent : '#ffffff';
           ctx.beginPath(); ctx.arc(x, cy + off, Math.max(0.5, r * 0.4), 0, Math.PI * 2); ctx.fill();
+          continue;
+        }
+        if (trailId === 'bubbles') {
+          ctx.globalAlpha = (1 - f) * 0.6;
+          ctx.strokeStyle = '#bfe9ff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(x, cy - f * 6, Math.max(0.5, r * 0.45), 0, Math.PI * 2); ctx.stroke();
+          continue;
+        }
+        if (trailId === 'smoke') {
+          ctx.globalAlpha = (1 - f) * 0.35;
+          ctx.fillStyle = '#d8d8d8';
+          ctx.beginPath(); ctx.arc(x, cy - f * 8, Math.max(0.5, r * (0.6 + f * 0.9)), 0, Math.PI * 2); ctx.fill();
+          continue;
+        }
+        if (trailId === 'electric') {
+          const jitter = ((i * 928371) % 7) - 3;
+          ctx.globalAlpha = (1 - f) * 0.85;
+          ctx.strokeStyle = '#9df5ff';
+          ctx.shadowColor = '#9df5ff'; ctx.shadowBlur = 6;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(headX - (i + 1) * step, cy);
+          ctx.lineTo(x, cy + jitter);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          continue;
+        }
+        if (trailId === 'petals') {
+          ctx.save();
+          ctx.translate(x, cy + f * 6);
+          ctx.rotate(i * 0.7);
+          ctx.globalAlpha = (1 - f) * 0.7;
+          ctx.fillStyle = i % 2 === 0 ? '#ffb3d9' : '#d9b3ff';
+          ctx.beginPath(); ctx.ellipse(0, 0, Math.max(0.5, r * 0.5), Math.max(0.5, r * 0.25), 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
           continue;
         }
         ctx.globalAlpha = (1 - f) * (trailId === 'neon' ? 0.6 : 0.45);

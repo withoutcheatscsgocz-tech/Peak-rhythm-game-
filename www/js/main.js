@@ -45,6 +45,22 @@ const App = (() => {
     UI.showScreen('screen-start', false);
   }
 
+  /**
+   * Unlocks an achievement outside the normal end-of-run flow (e.g. caching
+   * a song, publishing to the Public Library, surviving an Endless run) and
+   * surfaces toasts for it plus any themes/trails it gates.
+   */
+  function announceAchievement(achId) {
+    if (!Storage.unlockAchievement(achId)) return;
+    UI.showAchievementToasts([achId]);
+    const cosmetics = Storage.unlockCosmeticsForAchievement(achId);
+    cosmetics.newThemes.forEach(id => UI.showThemeUnlockOverlay(id));
+    cosmetics.newTrails.forEach(id => {
+      const def = Storage.getTrailDefs().find(d => d.id === id);
+      UI.showToast(`TRAIL UNLOCKED: ${def ? def.name : id.toUpperCase()}`);
+    });
+  }
+
   function resetSessionState() {
     current = { mode: 'file', audioBuffer: null, analysis: null, levelData: null, songHash: null, songName: null, songFile: null, publicLevel: null };
     lastResult = null;
@@ -323,6 +339,7 @@ const App = (() => {
         });
         levelData = Level.generate(analysis, hash);
         Storage.cacheSongAnalysis(hash, file.name, analysis, levelData);
+        if (Storage.getLibrarySongs().length >= 8) announceAchievement('archivist');
       }
       current.audioBuffer = audioBuffer;
       current.analysis = analysis;
@@ -558,6 +575,7 @@ const App = (() => {
         Storage.recordPublishedLevel(result.id, result.ownerToken, title);
       }
       UI.setPublishStatus('Published! Other players can now find this in the Public Library. You can delete it later from the Public Library list.');
+      announceAchievement('goingPublic');
     } catch (e) {
       console.error(e);
       if (e && (e.code === 'TOO_LARGE' || /413|too large/i.test(String(e.message)))) {
@@ -889,6 +907,10 @@ const App = (() => {
       const def = Storage.getSkinDefs().find(d => d.id === id);
       UI.showToast(`SKIN UNLOCKED: ${def ? def.name : id.toUpperCase()}`);
     });
+    lastRankInfo.newTrails.forEach(id => {
+      const def = Storage.getTrailDefs().find(d => d.id === id);
+      UI.showToast(`TRAIL UNLOCKED: ${def ? def.name : id.toUpperCase()}`);
+    });
     if (result.finished && current.publicLevel) submitGlobalScore(result);
   }
 
@@ -953,6 +975,7 @@ const App = (() => {
       };
       endless.songsSurvived++;
       endless.totalTime = (endless.totalTime || 0) + result.duration;
+      if (endless.songsSurvived >= 5) announceAchievement('endlessLegend');
       endless.index = (endless.index + 1) % endless.queue.length;
       startEndlessSong();
     } else {

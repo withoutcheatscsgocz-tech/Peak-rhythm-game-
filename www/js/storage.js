@@ -23,7 +23,19 @@ const Storage = (() => {
     { id: 'bpmPurist',   name: 'PURE RHYTHM',   icon: '\u{1F3B5}', hint: 'Finish a song with BPM ONLY on' },
     { id: 'ghostBuster', name: 'GHOST BUSTER',  icon: '\u{1F47B}', hint: 'Beat your ghost with GHOST DOT on' },
     { id: 'dedication',  name: 'DEDICATION',    icon: '⏱️', hint: 'Play for 1 hour total (lifetime)', cumulative: 'totalPlayTimeSec', target: 3600 },
+    { id: 'ironLegs',    name: 'IRON LEGS',     icon: '\u{1F45F}', hint: 'Jump 5000 times (lifetime)', cumulative: 'totalJumps', target: 5000 },
+    { id: 'veteran',     name: 'VETERAN',       icon: '\u{1F396}', hint: 'Play 50 songs total', cumulative: 'totalSongsPlayed', target: 50 },
+    { id: 'legendary',   name: 'LEGENDARY',     icon: '\u{1F31F}', hint: 'Reach a 500 combo' },
+    { id: 'chaosTheory', name: 'CHAOS THEORY',  icon: '\u{1F300}', hint: 'Use 5 different modifiers (lifetime)' },
+    { id: 'gluttonForPunishment', name: 'GLUTTON FOR PUNISHMENT', icon: '\u{2620}\u{FE0F}', hint: 'Finish a song with 3+ hard modifiers active' },
+    { id: 'archivist',   name: 'ARCHIVIST',     icon: '\u{1F4DA}', hint: 'Cache 8 songs in your library' },
+    { id: 'goingPublic', name: 'GOING PUBLIC',  icon: '\u{1F310}', hint: 'Publish a level to the Public Library' },
+    { id: 'endlessLegend', name: 'ENDLESS LEGEND', icon: '\u{1F501}', hint: 'Survive 5 songs in one Endless run' },
+    { id: 'nightOwl',    name: 'NIGHT OWL',     icon: '\u{1F989}', hint: 'Finish a song between midnight and 5am' },
   ];
+
+  // modifiers flagged 'hard: true' in game.js MODIFIER_DEFS - kept in sync manually
+  const HARD_MODIFIERS = ['insane', 'bpmOnly', 'blindRing', 'suddenDeath', 'ghostDot'];
 
   const THEME_DEFS = [
     { id: 'default',    name: 'DEFAULT',     hint: 'Unlocked from the start' },
@@ -34,6 +46,12 @@ const Storage = (() => {
     { id: 'frost',      name: 'FROST',       hint: 'Unlock the PERFECT TEN achievement' },
     { id: 'sunset',     name: 'SUNSET',      hint: 'Finish a song with RUSH 1.25x' },
     { id: 'inferno',    name: 'INFERNO',     hint: 'Unlock the NERVES OF STEEL achievement' },
+    { id: 'cyberpunk',  name: 'CYBERPUNK',   hint: 'Unlock the CHAOS THEORY achievement' },
+    { id: 'emerald',    name: 'EMERALD',     hint: 'Unlock the ARCHIVIST achievement' },
+    { id: 'nebula',     name: 'NEBULA',      hint: 'Unlock the ENDLESS LEGEND achievement' },
+    { id: 'arcade',     name: 'ARCADE',      hint: 'Unlock the GOING PUBLIC achievement' },
+    { id: 'abyss',      name: 'ABYSS',       hint: 'Unlock the IRON LEGS achievement' },
+    { id: 'noir',       name: 'NOIR',        hint: 'Unlock the NIGHT OWL achievement' },
   ];
 
   const SKIN_DEFS = [
@@ -45,6 +63,12 @@ const Storage = (() => {
     { id: 'pulsar',  name: 'PULSAR',  hint: 'Unlock via COLLECTOR achievement' },
     { id: 'nova',    name: 'NOVA',    hint: 'Unlock via CENTURION achievement' },
     { id: 'phantom', name: 'PHANTOM', hint: 'Unlock via GHOST BUSTER achievement' },
+    { id: 'galaxy',  name: 'GALAXY',  hint: 'Unlock via LEGENDARY achievement' },
+    { id: 'crystal', name: 'CRYSTAL', hint: 'Unlock via VETERAN achievement' },
+    { id: 'magma',   name: 'MAGMA',   hint: 'Unlock via GLUTTON FOR PUNISHMENT achievement' },
+    { id: 'disco',   name: 'DISCO',   hint: 'Unlock via CHAOS THEORY achievement' },
+    { id: 'circuit', name: 'CIRCUIT', hint: 'Unlock via IRON LEGS achievement' },
+    { id: 'yinyang', name: 'YIN YANG', hint: 'Unlock via NIGHT OWL achievement' },
   ];
 
   // skin id -> achievement id required
@@ -52,6 +76,8 @@ const Storage = (() => {
     star: 'flawless', comet: 'speedDemon', smiley: 'nightShift',
     diamond: 'comboKing', pulsar: 'collector',
     nova: 'centurion', phantom: 'ghostBuster',
+    galaxy: 'legendary', crystal: 'veteran', magma: 'gluttonForPunishment',
+    disco: 'chaosTheory', circuit: 'ironLegs', yinyang: 'nightOwl',
   };
 
   const TRAIL_DEFS = [
@@ -62,12 +88,24 @@ const Storage = (() => {
     { id: 'ribbon',  name: 'RIBBON',  hint: 'Unlock via FLAWLESS achievement' },
     { id: 'sparkle', name: 'SPARKLE', hint: 'Unlock via NIGHT SHIFT achievement' },
     { id: 'neon',    name: 'NEON',    hint: 'Unlock via COMBO KING achievement' },
+    { id: 'bubbles', name: 'BUBBLES', hint: 'Unlock via IRON LEGS achievement' },
+    { id: 'smoke',   name: 'SMOKE',   hint: 'Unlock via VETERAN achievement' },
+    { id: 'electric',name: 'ELECTRIC',hint: 'Unlock via LEGENDARY achievement' },
+    { id: 'petals',  name: 'PETALS',  hint: 'Unlock via ENDLESS LEGEND achievement' },
   ];
 
   // trail id -> achievement id required (classic / none are always available)
   const TRAIL_UNLOCK_ACHIEVEMENT = {
     rainbow: 'centurion', fire: 'speedDemon', ribbon: 'flawless',
     sparkle: 'nightShift', neon: 'comboKing',
+    bubbles: 'ironLegs', smoke: 'veteran', electric: 'legendary', petals: 'endlessLegend',
+  };
+
+  // theme id -> achievement id required (the original 8 themes use bespoke
+  // conditions in recordRunResult; new themes are gated purely on achievements)
+  const THEME_UNLOCK_ACHIEVEMENT = {
+    cyberpunk: 'chaosTheory', emerald: 'archivist', nebula: 'endlessLegend',
+    arcade: 'goingPublic', abyss: 'ironLegs', noir: 'nightOwl',
   };
 
   function defaultData() {
@@ -86,8 +124,14 @@ const Storage = (() => {
         playerName: '', // shown on global leaderboards for shared Public Library levels
         vocalFocus: 15, // 0-100: rhythm follows vocals/melody (100) vs drums (0) - default leans drums
       },
-      themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false },
-      skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false },
+      themes: {
+        default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false,
+        cyberpunk: false, emerald: false, nebula: false, arcade: false, abyss: false, noir: false,
+      },
+      skins: {
+        classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false,
+        galaxy: false, crystal: false, magma: false, disco: false, circuit: false, yinyang: false,
+      },
       achievements: {}, // id -> true
       stats: {
         totalPlayTimeSec: 0,
@@ -211,6 +255,25 @@ const Storage = (() => {
     return THEME_DEFS.every(t => isThemeUnlocked(t.id));
   }
 
+  /**
+   * Given an achievement id that just got unlocked, unlocks any themes gated
+   * on it (via THEME_UNLOCK_ACHIEVEMENT) and reports any trails gated on it
+   * (via TRAIL_UNLOCK_ACHIEVEMENT - trails have no persisted unlock state of
+   * their own, isTrailUnlocked derives it live from the achievement).
+   * Returns { newThemes, newTrails }. Safe to call from any code path that
+   * unlocks an achievement, not just recordRunResult.
+   */
+  function unlockCosmeticsForAchievement(achId) {
+    const newThemes = [], newTrails = [];
+    for (const [themeId, reqAch] of Object.entries(THEME_UNLOCK_ACHIEVEMENT)) {
+      if (reqAch === achId && unlockTheme(themeId)) newThemes.push(themeId);
+    }
+    for (const [trailId, reqAch] of Object.entries(TRAIL_UNLOCK_ACHIEVEMENT)) {
+      if (reqAch === achId) newTrails.push(trailId);
+    }
+    return { newThemes, newTrails };
+  }
+
   // ---------------- achievements ----------------
   function getAchievementDefs() { return ACHIEVEMENT_DEFS; }
   function isAchievementUnlocked(id) { return !!load().achievements[id]; }
@@ -230,7 +293,7 @@ const Storage = (() => {
   /**
    * Records the result of a finished/aborted run, updates lifetime stats,
    * leaderboards, and checks/unlocks achievements + theme/skin unlocks.
-   * Returns { newAchievements, newThemes, newSkins, leaderboardRank }
+   * Returns { newAchievements, newThemes, newSkins, newTrails, leaderboardRank }
    */
   function recordRunResult(result) {
     const d = load();
@@ -271,6 +334,9 @@ const Storage = (() => {
       if (result.modifiers && result.modifiers.includes('suddenDeath') && unlockAchievement('suddenDeathSurvivor')) newAchievements.push('suddenDeathSurvivor');
       if (result.modifiers && result.modifiers.includes('bpmOnly') && unlockAchievement('bpmPurist')) newAchievements.push('bpmPurist');
       if (result.modifiers && result.modifiers.includes('ghostDot') && (result.ghostDelta || 0) > 0 && unlockAchievement('ghostBuster')) newAchievements.push('ghostBuster');
+      const hardModifierCount = (result.modifiers || []).filter(m => HARD_MODIFIERS.includes(m)).length;
+      if (hardModifierCount >= 3 && unlockAchievement('gluttonForPunishment')) newAchievements.push('gluttonForPunishment');
+      if (new Date().getHours() < 5 && unlockAchievement('nightOwl')) newAchievements.push('nightOwl');
 
       // theme unlocks
       if (unlockTheme('vaporwave')) newThemes.push('vaporwave');
@@ -306,6 +372,17 @@ const Storage = (() => {
     if (s.totalJumps >= 1000 && unlockAchievement('marathon')) newAchievements.push('marathon');
     if (s.totalSongsPlayed >= 10 && unlockAchievement('nightShift')) newAchievements.push('nightShift');
     if (s.totalPlayTimeSec >= 3600 && unlockAchievement('dedication')) newAchievements.push('dedication');
+    if ((result.maxCombo || 0) >= 500 && unlockAchievement('legendary')) newAchievements.push('legendary');
+    if (s.totalJumps >= 5000 && unlockAchievement('ironLegs')) newAchievements.push('ironLegs');
+    if (s.totalSongsPlayed >= 50 && unlockAchievement('veteran')) newAchievements.push('veteran');
+    if (Object.keys(s.modifierUsage).length >= 5 && unlockAchievement('chaosTheory')) newAchievements.push('chaosTheory');
+
+    const newTrails = [];
+    newAchievements.forEach(achId => {
+      const cosmetics = unlockCosmeticsForAchievement(achId);
+      newThemes.push(...cosmetics.newThemes);
+      newTrails.push(...cosmetics.newTrails);
+    });
 
     // collector + dependent skin unlocks (check after theme unlocks above)
     if (allThemesUnlocked() && unlockAchievement('collector')) newAchievements.push('collector');
@@ -319,7 +396,7 @@ const Storage = (() => {
     }
 
     save();
-    return { newAchievements, newThemes, newSkins, leaderboardRank };
+    return { newAchievements, newThemes, newSkins, newTrails, leaderboardRank };
   }
 
   // ---------------- leaderboards ----------------
@@ -442,6 +519,7 @@ const Storage = (() => {
     getSettings, setSetting,
     getPlayerName, setPlayerName,
     getThemeDefs, getSkinDefs, getTrailDefs, isThemeUnlocked, isSkinUnlocked, isTrailUnlocked, unlockTheme, allThemesUnlocked,
+    unlockCosmeticsForAchievement,
     getAchievementDefs, isAchievementUnlocked, unlockAchievement, getAchievementProgress,
     recordRunResult,
     getLeaderboard, getAllPlayedSongs, getEndlessLeaderboard, addEndlessScore,

@@ -49,6 +49,36 @@ body[data-theme="inferno"] {
   --accent-dim: #8a1a00;
   --section-color: #ff3300;
 }
+body[data-theme="cyberpunk"] {
+  --accent: #00f0ff;
+  --accent-dim: #ff2bd6;
+  --section-color: #ff2bd6;
+}
+body[data-theme="emerald"] {
+  --accent: #3cff8a;
+  --accent-dim: #0d5c2e;
+  --section-color: #2bff6a;
+}
+body[data-theme="nebula"] {
+  --accent: #b388ff;
+  --accent-dim: #4a2f7a;
+  --section-color: #b06bff;
+}
+body[data-theme="arcade"] {
+  --accent: #e6ff4d;
+  --accent-dim: #4dff7a;
+  --section-color: #4dff7a;
+}
+body[data-theme="abyss"] {
+  --accent: #4dd0ff;
+  --accent-dim: #0a2a5c;
+  --section-color: #4dd0ff;
+}
+body[data-theme="noir"] {
+  --accent: #e0e0e0;
+  --accent-dim: #555555;
+  --section-color: #b0b0b0;
+}
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
 
