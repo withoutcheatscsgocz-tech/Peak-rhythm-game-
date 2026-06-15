@@ -67,7 +67,7 @@ const Storage = (() => {
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
         playerName: '', // shown on global leaderboards for shared Public Library levels
-        vocalFocus: 70, // 0-100: rhythm follows vocals/melody (100) vs drums (0)
+        vocalFocus: 15, // 0-100: rhythm follows vocals/melody (100) vs drums (0) - default leans drums
       },
       themes: { default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false },
       skins: { classic: true, star: false, comet: false, smiley: false, diamond: false, pulsar: false, nova: false, phantom: false },

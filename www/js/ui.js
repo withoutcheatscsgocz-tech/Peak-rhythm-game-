@@ -214,7 +214,7 @@ const UI = (() => {
 
     const vocalFocusSlider = $('vocal-focus-slider');
     const vocalFocusValue = $('vocal-focus-value');
-    const vocalFocusInit = settings.vocalFocus != null ? settings.vocalFocus : 70;
+    const vocalFocusInit = settings.vocalFocus != null ? settings.vocalFocus : 15;
     vocalFocusSlider.value = vocalFocusInit;
     vocalFocusValue.textContent = vocalFocusLabel(vocalFocusInit);
     vocalFocusSlider.addEventListener('input', () => {

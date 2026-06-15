@@ -55,7 +55,7 @@ const AudioEngine = (() => {
     // Global "Rhythm Focus" preference (0-100, Settings screen). Higher ->
     // vocals/melody take the lead more readily; lower -> drums lead more
     // often. Converted to the mid-band share threshold via vocalFocusThreshold().
-    vocalFocus: 70,
+    vocalFocus: 15,
   };
 
   function defaultTunerSettings() {
@@ -79,7 +79,7 @@ const AudioEngine = (() => {
    * Lower threshold -> easier for vocals to win -> higher slider value.
    */
   function vocalFocusThreshold(pct) {
-    const v = pct == null ? 70 : Math.max(0, Math.min(100, pct));
+    const v = pct == null ? 15 : Math.max(0, Math.min(100, pct));
     return 0.32 - v * 0.0028; // 0 -> 0.32 (drums favored), 100 -> 0.04 (vocal-locked)
   }
 
