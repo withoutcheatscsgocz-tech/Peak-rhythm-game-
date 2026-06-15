@@ -921,6 +921,77 @@ const UI = (() => {
       }
       skinGrid.appendChild(item);
     });
+
+    const trailGrid = $('trail-grid');
+    trailGrid.innerHTML = '';
+    Storage.getTrailDefs().forEach(def => {
+      const unlocked = Storage.isTrailUnlocked(def.id);
+      const item = document.createElement('div');
+      item.className = 'grid-item' + (unlocked ? '' : ' locked') + (settings.trail === def.id ? ' selected' : '');
+      const canvas = document.createElement('canvas');
+      canvas.width = 54; canvas.height = 36;
+      canvas.className = 'item-swatch trail-swatch';
+      canvas.style.background = 'transparent';
+      drawTrailPreview(canvas, def.id);
+      const name = document.createElement('div'); name.className = 'item-name'; name.textContent = def.name;
+      const hint = document.createElement('div'); hint.className = 'item-hint';
+      hint.textContent = unlocked ? 'TAP TO SELECT' : def.hint;
+      item.appendChild(canvas); item.appendChild(name); item.appendChild(hint);
+      if (unlocked) {
+        item.addEventListener('click', () => {
+          Storage.setSetting('trail', def.id);
+          populateThemesSkins();
+        });
+      }
+      trailGrid.appendChild(item);
+    });
+  }
+
+  /** Mini left-to-right preview of a trail style trailing into a leading dot. */
+  function drawTrailPreview(canvas, trailId) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height, cy = h / 2;
+    const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#ffffff';
+    ctx.clearRect(0, 0, w, h);
+    const headX = w - 10, n = 9, step = 4.4;
+    if (trailId === 'ribbon') {
+      ctx.lineCap = 'round';
+      for (let i = 1; i < n; i++) {
+        const f = i / n;
+        ctx.globalAlpha = (1 - f) * 0.7;
+        ctx.lineWidth = Math.max(1, 7 * (1 - f));
+        ctx.strokeStyle = accent;
+        ctx.beginPath();
+        ctx.moveTo(headX - (i - 1) * step, cy);
+        ctx.lineTo(headX - i * step, cy);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    } else if (trailId !== 'none') {
+      for (let i = n - 1; i >= 1; i--) {
+        const f = i / n;
+        const r = 6 * (1 - f * 0.6);
+        const x = headX - i * step;
+        if (trailId === 'sparkle') {
+          const off = ((i * 37) % 10 / 10 - 0.5) * 9;
+          ctx.globalAlpha = (1 - f) * 0.85;
+          ctx.fillStyle = i % 3 === 0 ? accent : '#ffffff';
+          ctx.beginPath(); ctx.arc(x, cy + off, Math.max(0.5, r * 0.4), 0, Math.PI * 2); ctx.fill();
+          continue;
+        }
+        ctx.globalAlpha = (1 - f) * (trailId === 'neon' ? 0.6 : 0.45);
+        if (trailId === 'rainbow') ctx.fillStyle = `hsl(${(i * 32) % 360}, 95%, 60%)`;
+        else if (trailId === 'fire') ctx.fillStyle = `hsl(${48 - 48 * f}, 100%, ${62 - 24 * f}%)`;
+        else ctx.fillStyle = accent;
+        if (trailId === 'neon') { ctx.shadowColor = accent; ctx.shadowBlur = 8; }
+        ctx.beginPath(); ctx.arc(x, cy, Math.max(0.5, r), 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    // leading dot
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(headX, cy, 7, 0, Math.PI * 2); ctx.fill();
   }
 
   function drawSkinPreview(canvas, skinId) {

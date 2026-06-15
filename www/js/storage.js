@@ -54,6 +54,22 @@ const Storage = (() => {
     nova: 'centurion', phantom: 'ghostBuster',
   };
 
+  const TRAIL_DEFS = [
+    { id: 'classic', name: 'CLASSIC', hint: 'Unlocked from the start' },
+    { id: 'none',    name: 'NONE',    hint: 'No trail - clean look' },
+    { id: 'rainbow', name: 'RAINBOW', hint: 'Unlock via CENTURION achievement' },
+    { id: 'fire',    name: 'FIRE',    hint: 'Unlock via SPEED DEMON achievement' },
+    { id: 'ribbon',  name: 'RIBBON',  hint: 'Unlock via FLAWLESS achievement' },
+    { id: 'sparkle', name: 'SPARKLE', hint: 'Unlock via NIGHT SHIFT achievement' },
+    { id: 'neon',    name: 'NEON',    hint: 'Unlock via COMBO KING achievement' },
+  ];
+
+  // trail id -> achievement id required (classic / none are always available)
+  const TRAIL_UNLOCK_ACHIEVEMENT = {
+    rainbow: 'centurion', fire: 'speedDemon', ribbon: 'flawless',
+    sparkle: 'nightShift', neon: 'comboKing',
+  };
+
   function defaultData() {
     return {
       version: 1,
@@ -63,6 +79,7 @@ const Storage = (() => {
         replayEnabled: detectLowEnd() ? false : false, // default off per spec
         theme: 'default',
         skin: 'classic',
+        trail: 'classic', // ball trail cosmetic - see TRAIL_DEFS
         debugLog: false,
         tapSound: 'hihat', // hihat | clap | 808 | laser
         rhythmGuide: 'auto', // auto | on | off - quiet metronome tick on every beat
@@ -168,13 +185,19 @@ const Storage = (() => {
     setSetting('playerName', (name || '').trim().slice(0, 20));
   }
 
-  // ---------------- themes / skins ----------------
+  // ---------------- themes / skins / trails (cosmetics) ----------------
   function getThemeDefs() { return THEME_DEFS; }
   function getSkinDefs() { return SKIN_DEFS; }
+  function getTrailDefs() { return TRAIL_DEFS; }
   function isThemeUnlocked(id) { return !!load().themes[id]; }
   function isSkinUnlocked(id) {
     if (id === 'classic') return true;
     const ach = SKIN_UNLOCK_ACHIEVEMENT[id];
+    return !!load().achievements[ach];
+  }
+  function isTrailUnlocked(id) {
+    if (id === 'classic' || id === 'none') return true;
+    const ach = TRAIL_UNLOCK_ACHIEVEMENT[id];
     return !!load().achievements[ach];
   }
   function unlockTheme(id) {
@@ -418,7 +441,7 @@ const Storage = (() => {
     load, save,
     getSettings, setSetting,
     getPlayerName, setPlayerName,
-    getThemeDefs, getSkinDefs, isThemeUnlocked, isSkinUnlocked, unlockTheme, allThemesUnlocked,
+    getThemeDefs, getSkinDefs, getTrailDefs, isThemeUnlocked, isSkinUnlocked, isTrailUnlocked, unlockTheme, allThemesUnlocked,
     getAchievementDefs, isAchievementUnlocked, unlockAchievement, getAchievementProgress,
     recordRunResult,
     getLeaderboard, getAllPlayedSongs, getEndlessLeaderboard, addEndlessScore,

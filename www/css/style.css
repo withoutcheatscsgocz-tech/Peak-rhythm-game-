@@ -494,6 +494,9 @@ input[type="range"] {
 .grid-item .item-swatch {
   width: 36px; height: 36px; border-radius: 50%; margin: 0 auto 8px;
 }
+.grid-item .trail-swatch {
+  width: 54px; height: 36px; border-radius: 8px;
+}
 
 .achievements-grid { grid-template-columns: 1fr; }
 .achievements-grid .grid-item { display: flex; align-items: center; justify-content: space-between; text-align: left; cursor: default; gap: 10px; }

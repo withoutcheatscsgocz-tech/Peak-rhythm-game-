@@ -350,7 +350,7 @@ const Game = (() => {
       jumps: carry.jumps || 0,
       perfectStreak: 0, perfectStreaksOf10Count: 0,
       inDrop: false, dropHasHit: false, dropSurvivedNoHit: false,
-      ringBeatIndex: 0, trailHistory: [],
+      ringBeatIndex: 0, trailHistory: [], trailHue: 0,
       comboFlashUntilReal: 0,
       hitStopUntilReal: 0, frozenSongTime: 0,
       screenShakeMag: 0, screenShakeUntilReal: 0,
@@ -532,10 +532,13 @@ const Game = (() => {
     }
   }
   function updateTrail() {
-    const skin = Storage.getSettings().skin;
-    const maxLen = 8 + Math.floor(Math.min(session.combo, 200) / 200 * 16) + (skin === 'comet' ? 14 : 0);
+    const settings = Storage.getSettings();
+    const skin = settings.skin;
+    const longTrail = skin === 'comet' || settings.trail === 'ribbon' || settings.trail === 'neon';
+    const maxLen = 8 + Math.floor(Math.min(session.combo, 200) / 200 * 16) + (longTrail ? 14 : 0);
     session.trailHistory.unshift(session.dotY);
     if (session.trailHistory.length > maxLen) session.trailHistory.length = maxLen;
+    session.trailHue = (session.trailHue + 7) % 360; // drives the RAINBOW trail
   }
 
   // ---------------- main loop ----------------
@@ -1110,16 +1113,66 @@ const Game = (() => {
     }
   }
 
-  function renderTrail(secColor, skin) {
+  function renderTrail(secColor, skin, trail) {
     const hist = session.trailHistory;
+    if (trail === 'none' || hist.length < 2) return;
+
+    // RIBBON: one tapering, glowing stroke through the trail history
+    if (trail === 'ribbon') {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.shadowColor = session.accentColor;
+      ctx.shadowBlur = 10;
+      for (let i = 1; i < hist.length; i++) {
+        const f = i / hist.length;
+        ctx.globalAlpha = (1 - f) * 0.5;
+        ctx.lineWidth = Math.max(1, DOT_RADIUS * 1.4 * (1 - f));
+        ctx.strokeStyle = session.accentColor;
+        ctx.beginPath();
+        ctx.moveTo(dotX - (i - 1) * 5, hist[i - 1]);
+        ctx.lineTo(dotX - i * 5, hist[i]);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      return;
+    }
+
     for (let i = 1; i < hist.length; i++) {
-      const alpha = (1 - i / hist.length) * 0.35;
-      const r = DOT_RADIUS * (1 - (i / hist.length) * 0.6);
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = skin === 'comet' ? `rgb(${secColor.r},${secColor.g},${secColor.b})` : session.accentColor;
+      const f = i / hist.length;
+      const x = dotX - i * 5;
+      const y = hist[i];
+      const r = DOT_RADIUS * (1 - f * 0.6);
+
+      if (trail === 'sparkle') {
+        // scattered little white sparks instead of a solid streak
+        const off = ((i * 2654435761) % 100 / 100 - 0.5) * DOT_RADIUS * 1.6;
+        ctx.globalAlpha = (1 - f) * 0.7;
+        ctx.fillStyle = i % 3 === 0 ? session.accentColor : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y + off, Math.max(0.5, r * 0.35), 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
+      ctx.globalAlpha = (1 - f) * (trail === 'neon' ? 0.5 : 0.35);
+      if (trail === 'rainbow') {
+        ctx.fillStyle = `hsl(${(session.trailHue + i * 16) % 360}, 95%, 60%)`;
+      } else if (trail === 'fire') {
+        // hot yellow at the ball cooling to deep red at the tail
+        ctx.fillStyle = `hsl(${lerp(48, 0, f)}, 100%, ${lerp(62, 38, f)}%)`;
+      } else if (trail === 'neon') {
+        ctx.fillStyle = session.accentColor;
+        ctx.shadowColor = session.accentColor;
+        ctx.shadowBlur = 12;
+      } else {
+        // classic (comet skin tints it with the section color)
+        ctx.fillStyle = skin === 'comet' ? `rgb(${secColor.r},${secColor.g},${secColor.b})` : session.accentColor;
+      }
       ctx.beginPath();
-      ctx.arc(dotX - i * 5, hist[i], Math.max(0.5, r), 0, Math.PI * 2);
+      ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2);
       ctx.fill();
+      if (trail === 'neon') ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
   }
@@ -1135,9 +1188,17 @@ const Game = (() => {
       const start = session.arcStartTime;
       const end = next ? next.time : start + session.beatInterval;
       const span = Math.max(0.001, end - start);
-      arcT = clamp((songTime - start) / span, 0, 1);
       const gapBeats = span / session.beatInterval;
-      let arcHeightRatio = clamp(ARC_HEIGHT_RATIO * gapBeats, ARC_HEIGHT_MIN_RATIO, ARC_HEIGHT_MAX_RATIO);
+      // For gaps longer than ~1.5 beats the ball HOPS once per beat instead of
+      // arcing in one giant curve. This keeps it low ("bounce on the beat") and
+      // removes the snap that used to happen when a tall arc reset onto the next
+      // spike (the "ball was way up high, then teleported down" glitch). Hops
+      // divide the gap evenly so the final hop still lands exactly on the spike.
+      const hops = Math.max(1, Math.round(gapBeats));
+      const hopSpan = span / hops;
+      const local = (songTime - start) / hopSpan;
+      arcT = songTime >= end ? 1 : clamp(local - Math.floor(local), 0, 1);
+      let arcHeightRatio = clamp(ARC_HEIGHT_RATIO * (hopSpan / session.beatInterval), ARC_HEIGHT_MIN_RATIO, ARC_HEIGHT_MAX_RATIO);
       if (session.arcGrade === 'good') arcHeightRatio *= GOOD_ARC_SCALE;
       dotY -= Math.sin(arcT * Math.PI) * height * arcHeightRatio;
       rotation = arcT * Math.PI * 0.5;
@@ -1286,6 +1347,7 @@ const Game = (() => {
   function render(songTime, realNow) {
     const skin = Storage.getSettings().skin;
     const theme = Storage.getSettings().theme;
+    const trail = Storage.getSettings().trail || 'classic';
     const section = currentSection(songTime);
     const secColor = SECTION_COLORS[section] || SECTION_COLORS.chill;
     const bgPulse = clamp(Math.max(getBeatPulse(songTime), getLiveBassLevel() * 0.9), 0, 1);
@@ -1322,7 +1384,7 @@ const Game = (() => {
 
     renderTrack(songTime, secColor);
     renderParticles(ctx);
-    renderTrail(secColor, skin);
+    renderTrail(secColor, skin, trail);
     renderDot(songTime, skin);
     if (!session.modifiers.has('blindRing')) renderRing(songTime, secColor);
     renderPopupsFn();
