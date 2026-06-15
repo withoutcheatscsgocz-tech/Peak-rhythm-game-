@@ -436,6 +436,7 @@ const UI = (() => {
   const TUNER_BANDS = ['bass'];
   const TUNER_BAND_COLORS = {
     bass: 'rgba(255,120,90,0.9)',
+    hits: 'rgba(255,225,60,0.95)',
   };
 
   function initTuner(songHash, analysis) {
@@ -501,6 +502,19 @@ const UI = (() => {
     beats.forEach((b) => {
       const x = (b.time / duration) * w;
       ctx.moveTo(x, 2);
+      ctx.lineTo(x, h - 2);
+    });
+    ctx.stroke();
+
+    // overlay the actual obstacle onsets (analysis.events) so it's visible
+    // whether they land on the beat grid above and on the waveform peaks
+    const events = analysis.events || [];
+    ctx.strokeStyle = TUNER_BAND_COLORS.hits;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    events.forEach((e) => {
+      const x = (e.time / duration) * w;
+      ctx.moveTo(x, h * 0.55);
       ctx.lineTo(x, h - 2);
     });
     ctx.stroke();

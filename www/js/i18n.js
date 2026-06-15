@@ -120,6 +120,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Min Spacing:',
     'tuner.preview': 'PREVIEW (10s)',
     'tuner.regenerate': 'REGENERATE LEVEL',
+    'tuner.legendWave': 'WAVEFORM',
+    'tuner.legendGrid': 'BEAT GRID',
+    'tuner.legendHits': 'OBSTACLE HITS',
 
     'modifiers.title': 'MODIFIERS',
     'modifiers.total': 'TOTAL:',
@@ -299,6 +302,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Min. odstup:',
     'tuner.preview': 'UKÁZKA (10s)',
     'tuner.regenerate': 'PŘEGENEROVAT ÚROVEŇ',
+    'tuner.legendWave': 'ZVUKOVÁ STOPA',
+    'tuner.legendGrid': 'MŘÍŽKA RYTMU',
+    'tuner.legendHits': 'PŘEKÁŽKY',
 
     'modifiers.title': 'MODIFIKÁTORY',
     'modifiers.total': 'CELKEM:',
@@ -478,6 +484,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Мин. интервал:',
     'tuner.preview': 'ПРЕВЬЮ (10с)',
     'tuner.regenerate': 'ПЕРЕГЕНЕРИРОВАТЬ УРОВЕНЬ',
+    'tuner.legendWave': 'ВОЛНОВАЯ ФОРМА',
+    'tuner.legendGrid': 'СЕТКА РИТМА',
+    'tuner.legendHits': 'ПРЕПЯТСТВИЯ',
 
     'modifiers.title': 'МОДИФИКАТОРЫ',
     'modifiers.total': 'ИТОГО:',
@@ -657,6 +666,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Min. Abstand:',
     'tuner.preview': 'VORSCHAU (10s)',
     'tuner.regenerate': 'LEVEL NEU GENERIEREN',
+    'tuner.legendWave': 'WELLENFORM',
+    'tuner.legendGrid': 'BEAT-RASTER',
+    'tuner.legendHits': 'HINDERNISSE',
 
     'modifiers.title': 'MODIFIKATOREN',
     'modifiers.total': 'GESAMT:',
@@ -836,6 +848,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Espaciado mín.:',
     'tuner.preview': 'VISTA PREVIA (10s)',
     'tuner.regenerate': 'REGENERAR NIVEL',
+    'tuner.legendWave': 'FORMA DE ONDA',
+    'tuner.legendGrid': 'CUADRÍCULA DE RITMO',
+    'tuner.legendHits': 'OBSTÁCULOS',
 
     'modifiers.title': 'MODIFICADORES',
     'modifiers.total': 'TOTAL:',
@@ -1015,6 +1030,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Espacement min. :',
     'tuner.preview': 'APERÇU (10s)',
     'tuner.regenerate': 'RÉGÉNÉRER LE NIVEAU',
+    'tuner.legendWave': 'FORME D\'ONDE',
+    'tuner.legendGrid': 'GRILLE RYTHMIQUE',
+    'tuner.legendHits': 'OBSTACLES',
 
     'modifiers.title': 'MODIFICATEURS',
     'modifiers.total': 'TOTAL :',
@@ -1194,6 +1212,9 @@ const I18N = (() => {
     'tuner.minSpacing': 'Min. odstęp:',
     'tuner.preview': 'PODGLĄD (10s)',
     'tuner.regenerate': 'ZREGENERUJ POZIOM',
+    'tuner.legendWave': 'PRZEBIEG FALI',
+    'tuner.legendGrid': 'SIATKA RYTMU',
+    'tuner.legendHits': 'PRZESZKODY',
 
     'modifiers.title': 'MODYFIKATORY',
     'modifiers.total': 'SUMA:',

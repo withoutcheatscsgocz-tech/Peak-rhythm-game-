@@ -104,6 +104,19 @@ const App = (() => {
     });
   }
 
+  /** When DEBUG LOG is on, prints the key beat-detection numbers for a song
+   * (BPM, phase, confidence, grid stability, dominant band, event count) so
+   * rhythm issues can be diagnosed per-track without extra tooling. */
+  function logAnalysisDebug(name, analysis) {
+    if (!Storage.getSettings().debugLog) return;
+    const ev = analysis.events || [];
+    UI.logDebugError(
+      `Analysis "${name}": bpm=${analysis.bpm} phase=${Math.round(analysis.phase * 1000)}ms ` +
+      `conf=${analysis.confidence.toFixed(2)} grid=${analysis.gridStability.toFixed(2)} ` +
+      `band=${analysis.dominantBand} events=${ev.length} dur=${analysis.duration.toFixed(1)}s`
+    );
+  }
+
   // ---------------- global action dispatcher ----------------
   function bindGlobalActions() {
     document.body.addEventListener('click', (e) => {
@@ -338,6 +351,7 @@ const App = (() => {
         analysis = await AudioEngine.analyze(audioBuffer, tunerSettings, (p) => {
           $('analyze-pct').textContent = `${Math.round(p * 100)}%`;
         });
+        logAnalysisDebug(file.name, analysis);
         levelData = Level.generate(analysis, hash);
         Storage.cacheSongAnalysis(hash, file.name, analysis, levelData);
         if (Storage.getLibrarySongs().length >= 8) announceAchievement('archivist');
@@ -786,6 +800,7 @@ const App = (() => {
     const analysis = await AudioEngine.analyze(current.audioBuffer, settings, (p) => {
       $('analyze-pct').textContent = `${Math.round(p * 100)}%`;
     });
+    logAnalysisDebug(current.songName || '', analysis);
     current.analysis = analysis;
     current.levelData = Level.generate(analysis, current.songHash);
     Storage.cacheSongAnalysis(current.songHash, current.songName, analysis, current.levelData);
