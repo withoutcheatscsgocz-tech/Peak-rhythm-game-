@@ -83,6 +83,18 @@ const AudioEngine = (() => {
     return 0.32 - v * 0.0028; // 0 -> 0.32 (drums favored), 100 -> 0.04 (vocal-locked)
   }
 
+  /**
+   * Maps the same slider to the low-band onset-energy share required for
+   * drums to lead. Lower slider value -> lower bar -> drums win almost any
+   * track with a kick/bass. At the default (15) this is ~9.6%, low enough
+   * that nearly every song with rhythm leads with its drums; turning the
+   * slider toward VOCALS raises the bar so a real vocal layer can take over.
+   */
+  function drumFocusThreshold(pct) {
+    const v = pct == null ? 15 : Math.max(0, Math.min(100, pct));
+    return 0.06 + v * 0.0024; // 0 -> 0.06 (drums lead almost always), 100 -> 0.30
+  }
+
   // ---------------- small math helpers ----------------
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
@@ -147,11 +159,12 @@ const AudioEngine = (() => {
    *  1. BAND NOVELTY: spectral-flux onset envelopes for low (kick/808),
    *     mid (vocals/melodic) and high (snare/hats) bands at a ~11.6ms hop,
    *     locally mean-subtracted so only real attacks survive.
-   *  2. DOMINANT MIX: VOCALS lead whenever the mid band carries a real
-   *     vocal/melodic layer (most songs); drums (low) lead only on
-   *     instrumental tracks; high leads on sparse percussion-only material.
-   *     The player follows the singer, so gameplay events come from the
-   *     vocal line first, with kick/hat assisting lightly underneath.
+   *  2. DOMINANT MIX: DRUMS (low/kick+bass) lead whenever the track has any
+   *     real low end (most songs); vocals/melody (mid) lead only on low-free
+   *     tracks (a cappella, sparse intros); high leads on bass-less,
+   *     vocal-less percussion. Gameplay events come from the kick/bass pulse
+   *     first, with vocals/hats assisting lightly underneath - that steady
+   *     pulse is what makes a chart feel locked to the beat.
    *  3. EVENTS: every clear onset peak becomes a gameplay event at its TRUE
    *     detected time (latency-calibrated on synthetic clicks). Obstacles
    *     are placed ONLY on events - the ball bounces exactly on audible
@@ -256,29 +269,27 @@ const AudioEngine = (() => {
     const combNov = new Float64Array(numFrames);
     for (let i = 0; i < numFrames; i++) combNov[i] = lowNov[i] + 0.8 * midNov[i] + 0.6 * highNov[i];
 
-    // ---- 2. dominant mix: VOCALS lead whenever the song actually sings ----
-    // The player's eye and ear follow the singer, so the ball should bounce
-    // on the VOCAL/melodic line first (mid band). Priority order:
-    //   1. mid  (vocals / lead melody)  - whenever a real vocal layer exists
-    //   2. low  (kick / 808 / bass)     - instrumental, drum-driven tracks
-    //   3. high (snare / hats)          - sparse, bass-less / percussion-only
+    // ---- 2. dominant mix: DRUMS lead whenever the song has a beat ----
+    // The ball should bounce on the KICK/BASS pulse first (low band) - that's
+    // the steady, predictable element that makes a chart feel "on rhythm".
+    // Priority order:
+    //   1. low  (kick / 808 / bass)     - whenever the track has any real low end
+    //   2. mid  (vocals / lead melody)  - low-free tracks (a cappella, sparse intros)
+    //   3. high (snare / hats)          - bass-less AND vocal-less, percussion only
     // The chosen band LEADS event detection; the others only ASSIST (kept
-    // light so the lead truly drives the chart instead of the kick taking over).
+    // light so the lead truly drives the chart instead of being swamped).
     let lowTotal = 0, midTotal = 0, highTotal = 0, combTotal = 0;
     for (let i = 0; i < numFrames; i++) {
       lowTotal += lowNov[i]; midTotal += midNov[i]; highTotal += highNov[i]; combTotal += combNov[i];
     }
-    // A vocal/melodic layer is "present" when the mid band carries a real
-    // share of the total onset energy. Vocals have less flux than drums, so
-    // the bar is intentionally low by default (~12%) - we'd rather follow a
-    // quiet voice than fall back to the kick and feel disconnected from the
-    // song. The exact bar is user-tunable via the "Rhythm Focus" slider.
-    const vocalThreshold = vocalFocusThreshold(t.vocalFocus);
-    const hasVocals = combTotal > 1e-9 && midTotal >= vocalThreshold * combTotal;
-    const hasDrums = combTotal > 1e-9 && lowTotal >= 0.10 * combTotal;
+    // Drums "lead" once the low band carries a real share of the onset energy -
+    // the bar is intentionally low by default so nearly any track with a
+    // kick/bass follows it. The exact bars are user-tunable via "Rhythm Focus".
+    const hasDrums = combTotal > 1e-9 && lowTotal >= drumFocusThreshold(t.vocalFocus) * combTotal;
+    const hasVocals = combTotal > 1e-9 && midTotal >= vocalFocusThreshold(t.vocalFocus) * combTotal;
     let dominantBand;
-    if (hasVocals) dominantBand = 'mid';
-    else if (hasDrums) dominantBand = 'low';
+    if (hasDrums) dominantBand = 'low';
+    else if (hasVocals) dominantBand = 'mid';
     else dominantBand = highTotal >= lowTotal ? 'high' : 'low';
 
     const domNov = dominantBand === 'low' ? lowNov : (dominantBand === 'mid' ? midNov : highNov);
