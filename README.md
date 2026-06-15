@@ -23,6 +23,7 @@ www/                  the actual game (static HTML5 app)
 capacitor.config.json Capacitor config (appId com.nikita.onedot)
 package.json          Capacitor CLI/deps for the Android wrapper
 android/              generated native Android project (Capacitor)
+electron/             desktop wrapper (Electron) for Windows/Linux/macOS builds
 ```
 
 ## Playing it as a website
@@ -98,6 +99,38 @@ cd android
 The app runs fullscreen/edge-to-edge (system bars are hidden, swipe to
 reveal temporarily) and supports both portrait and landscape
 orientation (`android:screenOrientation="fullSensor"`).
+
+## Building the desktop app (Electron)
+
+`electron/main.js` wraps `www/` in an Electron window. It serves the
+`www/` folder over a local `http://127.0.0.1` server (instead of
+`file://`) so Web Audio and `getUserMedia` (MIC MODE) work normally.
+
+### Run it during development
+
+```bash
+npm install
+npm run electron
+```
+
+### Build a Windows .exe
+
+```bash
+npm run dist:win
+# output: dist/ONE DOT-win32-x64/ONE DOT.exe
+```
+
+This produces an unpacked, portable Windows x64 build (just zip the
+`ONE DOT-win32-x64` folder and run `ONE DOT.exe` - no installer).
+Building Windows targets from Linux/macOS requires Wine (used to embed
+the icon/metadata into the `.exe`):
+
+```bash
+sudo apt-get install wine64
+# electron-packager looks for a `wine64` binary specifically;
+# on distros where `wine` provides 64-bit support under that name only:
+sudo ln -s "$(which wine)" /usr/bin/wine64
+```
 
 ## Notes
 
