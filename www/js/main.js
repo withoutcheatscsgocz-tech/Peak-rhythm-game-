@@ -1270,9 +1270,9 @@ const App = (() => {
     return bytes;
   }
 
-  async function fetchBuffer(url, onProgress) {
+  async function fetchBuffer(url, onProgress, headers) {
     // 1) Try Capacitor native HTTP first (no CORS on Android)
-    const capRes = await capFetch(url, { responseType: 'arraybuffer' });
+    const capRes = await capFetch(url, { responseType: 'arraybuffer', headers });
     if (capRes && capRes.status >= 200 && capRes.status < 400) {
       const d = capRes.data;
       if (d instanceof ArrayBuffer) return new Uint8Array(d);
@@ -1283,8 +1283,8 @@ const App = (() => {
         return out;
       }
     }
-    // 2) Browser fetch with streaming progress
-    const res = await fetch(url);
+    // 2) Browser fetch with streaming progress (Referer etc. are ignored here)
+    const res = await fetch(url, headers ? { headers } : undefined);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const total = parseInt(res.headers.get('content-length') || '0', 10);
     const reader = res.body.getReader();
@@ -1302,6 +1302,60 @@ const App = (() => {
     let off = 0;
     for (const c of chunks) { out.set(c, off); off += c.length; }
     return out;
+  }
+
+  // --- ytmp3.mobi (ymcdn.org) flow ---------------------------------------
+  // init -> convert -> poll progress -> download. Requires a Referer header
+  // (only settable via CapacitorHttp on Android / Node on desktop, not browser
+  // fetch), so this path is primarily for the native/desktop builds.
+  const YTMP3_REFERER = 'https://ytmp3.mobi/';
+  const YTMP3_HEADERS = {
+    Referer: YTMP3_REFERER,
+    Origin: 'https://ytmp3.mobi',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+  };
+
+  async function ymcdnGetJson(url) {
+    const capRes = await capFetch(url, { responseType: 'json', headers: YTMP3_HEADERS, connectTimeout: 12000 });
+    if (!capRes) throw new Error('ytmp3 requires the mobile or desktop app');
+    if (capRes.status < 200 || capRes.status >= 300) throw new Error('ytmp3 HTTP ' + capRes.status);
+    return typeof capRes.data === 'string' ? JSON.parse(capRes.data) : capRes.data;
+  }
+
+  async function ytmp3Resolve(youtubeUrl, onProgress) {
+    const ts = () => Date.now();
+    // 1) init -> convertURL (with signature)
+    const init = await ymcdnGetJson(`https://d.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_=${ts()}`);
+    if (!init || !init.convertURL) throw new Error('ytmp3 init failed');
+    if (onProgress) onProgress(0.05);
+
+    // 2) convert -> hash, title, progressURL, downloadURL
+    const s2 = await ymcdnGetJson(`${init.convertURL}&v=${encodeURIComponent(youtubeUrl)}&f=mp3&_=${ts()}`);
+    if (!s2 || s2.error || !s2.hash) {
+      throw new Error((s2 && s2.error && s2.error.message) || 'ytmp3 convert rejected this link');
+    }
+    const hash = s2.hash;
+    const title = s2.title || 'YouTube audio';
+    const progressURL = s2.progressURL || `https://a.ymcdn.org/api/v1/progress?id=${hash}`;
+    const downloadURL = s2.downloadURL || `https://ydl.ymcdn.org/api/v1/download/${hash}/${youtubeUrl}`;
+
+    // 3) poll until progress === 3 (finished); up to ~120s
+    let done = false;
+    for (let i = 0; i < 60; i++) {
+      let p = null;
+      try { p = await ymcdnGetJson(`${progressURL}&_=${ts()}`); } catch (e) { /* transient */ }
+      if (p) {
+        if (p.progress === 3) { done = true; break; }
+        if (onProgress) onProgress(0.1 + 0.4 * (Math.max(0, Math.min(100, p.percent || 0)) / 100));
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    if (!done) throw new Error('ytmp3 conversion timed out — try again');
+
+    // 4) download the finished mp3
+    if (onProgress) onProgress(0.55);
+    const bytes = assertLooksLikeAudio(await fetchBuffer(downloadURL, onProgress, YTMP3_HEADERS));
+    return { data: bytes, name: title };
   }
 
   // Ask a Cobalt instance to resolve a direct/tunnel audio URL.
@@ -1371,7 +1425,15 @@ const App = (() => {
     if (!vid) throw new Error('Could not read a YouTube video ID from that link');
     const canonical = `https://www.youtube.com/watch?v=${vid}`;
 
-    // 1) Cobalt (most reliable)
+    // 1) ytmp3.mobi (primary — works from normal residential/mobile IPs)
+    try {
+      const res = await ytmp3Resolve(canonical, onProgress);
+      if (onProgress) onProgress(1);
+      return res;
+    } catch (e) {
+      console.warn('ytmp3 failed:', e.message);
+    }
+    // 2) Cobalt cascade
     try {
       const bytes = await cobaltResolve(canonical, onProgress);
       if (onProgress) onProgress(1);
@@ -1379,7 +1441,7 @@ const App = (() => {
     } catch (e) {
       console.warn('Cobalt cascade failed:', e.message);
     }
-    // 2) Invidious fallback
+    // 3) Invidious fallback
     try {
       const { bytes, title } = await invidiousResolve(vid, onProgress);
       if (onProgress) onProgress(1);

@@ -83,11 +83,67 @@ function httpsGet(urlStr, opts = {}) {
   });
 }
 
-// ---- YouTube via ytdl-core --------------------------------------------------
+function httpsGetJson(urlStr, headers) {
+  return httpsGet(urlStr, { headers }).then((buf) => JSON.parse(buf.toString('utf8')));
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- YouTube via ytmp3.mobi (ymcdn.org) ------------------------------------
+
+const YTMP3_HEADERS = {
+  Referer: 'https://ytmp3.mobi/',
+  Origin: 'https://ytmp3.mobi',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+};
 
 function isYouTubeURL(url) {
   return /(?:youtube\.com|youtu\.be|music\.youtube\.com)/i.test(url);
 }
+
+function extractYouTubeId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+async function downloadYtmp3(url, sendProgress) {
+  const vid = extractYouTubeId(url);
+  if (!vid) throw new Error('Could not read a YouTube video ID');
+  const canonical = `https://www.youtube.com/watch?v=${vid}`;
+  const ts = () => Date.now();
+
+  const init = await httpsGetJson(`https://d.ymcdn.org/api/v1/init?p=y&23=1llum1n471&_=${ts()}`, YTMP3_HEADERS);
+  if (!init || !init.convertURL) throw new Error('ytmp3 init failed');
+  sendProgress(0.05);
+
+  const s2 = await httpsGetJson(`${init.convertURL}&v=${encodeURIComponent(canonical)}&f=mp3&_=${ts()}`, YTMP3_HEADERS);
+  if (!s2 || s2.error || !s2.hash) {
+    throw new Error((s2 && s2.error && s2.error.message) || 'ytmp3 convert rejected this link');
+  }
+  const title = s2.title || 'YouTube audio';
+  const progressURL = s2.progressURL || `https://a.ymcdn.org/api/v1/progress?id=${s2.hash}`;
+  const downloadURL = s2.downloadURL || `https://ydl.ymcdn.org/api/v1/download/${s2.hash}/${canonical}`;
+
+  let done = false;
+  for (let i = 0; i < 60; i++) {
+    let p = null;
+    try { p = await httpsGetJson(`${progressURL}&_=${ts()}`, YTMP3_HEADERS); } catch (e) { /* transient */ }
+    if (p) {
+      if (p.progress === 3) { done = true; break; }
+      sendProgress(0.1 + 0.4 * (Math.max(0, Math.min(100, p.percent || 0)) / 100));
+    }
+    await sleep(2000);
+  }
+  if (!done) throw new Error('ytmp3 conversion timed out');
+
+  sendProgress(0.55);
+  const buf = await httpsGet(downloadURL, { headers: YTMP3_HEADERS });
+  if (buf.length < 8 * 1024 || buf[0] === 0x3c) throw new Error('ytmp3 returned an error page');
+  sendProgress(1);
+  return { data: new Uint8Array(buf), name: title };
+}
+
+// ---- YouTube via ytdl-core (fallback) --------------------------------------
 
 async function downloadYouTube(url, sendProgress) {
   const ytdl = require('@distube/ytdl-core');
@@ -164,7 +220,13 @@ ipcMain.handle('download-audio', async (event, url) => {
   };
 
   if (isYouTubeURL(url)) {
-    return downloadYouTube(url, send);
+    // Primary: ytmp3.mobi (no YouTube bot-checks). Fallback: ytdl-core.
+    try {
+      return await downloadYtmp3(url, send);
+    } catch (e) {
+      console.warn('ytmp3 failed, falling back to ytdl-core:', e.message);
+      return downloadYouTube(url, send);
+    }
   }
   if (isSpotifyURL(url)) {
     return downloadSpotify(url, send);
