@@ -124,6 +124,7 @@ const Storage = (() => {
         playerName: '', // shown on global leaderboards for shared Public Library levels
         vocalFocus: 15, // 0-100: rhythm follows vocals/melody (100) vs drums (0) - default leans drums
         language: null, // null = auto-detect from browser locale; otherwise an I18N.LOCALES code
+        cobaltUrl: '', // custom Cobalt API instance URL for YouTube downloads
       },
       themes: {
         default: true, vaporwave: false, matrix: false, bloodmoon: false, goldenhour: false, frost: false, sunset: false, inferno: false,

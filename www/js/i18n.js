@@ -73,6 +73,8 @@ const I18N = (() => {
     'settings.guideAuto': 'AUTO (first 3 plays)',
     'settings.playerName': 'Player Name (shown on Public Library leaderboards)',
     'settings.playerNamePlaceholder': 'PLAYER1234',
+    'settings.cobaltUrl': 'YouTube / Cobalt server URL',
+    'settings.cobaltUrlPlaceholder': 'https://your-cobalt.onrender.com',
     'settings.rhythmFocus': 'Rhythm Focus:',
     'settings.rhythmFocusHint': "Higher = the ball follows vocals/melody more; lower = it follows drums/bass more. New songs only - re-upload to apply to a song you already analyzed.",
     'settings.syncTestHint': "SYNC TEST plays a constant 120 BPM click track. If your taps on the clicks feel early/late, adjust the Latency Offset above. If the obstacles visually drift away from the beat over time, that's a timing bug.",

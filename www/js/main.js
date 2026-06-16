@@ -1306,8 +1306,13 @@ const App = (() => {
 
   // Ask a Cobalt instance to resolve a direct/tunnel audio URL.
   async function cobaltResolve(pageUrl, onProgress) {
+    // User's own instance gets priority over the public cascade.
+    const customUrl = (Storage.getSettings().cobaltUrl || '').trim();
+    const instances = customUrl
+      ? [customUrl, ...COBALT_INSTANCES.filter(u => u !== customUrl)]
+      : COBALT_INSTANCES;
     let lastErr = null;
-    for (const inst of COBALT_INSTANCES) {
+    for (const inst of instances) {
       try {
         const data = await postJson(inst, {
           url: pageUrl, downloadMode: 'audio', audioFormat: 'mp3',

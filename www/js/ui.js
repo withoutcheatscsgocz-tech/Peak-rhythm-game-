@@ -231,6 +231,14 @@ const UI = (() => {
       vocalFocusValue.textContent = vocalFocusLabel(parseInt(vocalFocusSlider.value, 10));
     });
 
+    const cobaltUrlInput = $('cobalt-url-input');
+    if (cobaltUrlInput) {
+      cobaltUrlInput.value = settings.cobaltUrl || '';
+      cobaltUrlInput.addEventListener('change', () => {
+        Storage.setSetting('cobaltUrl', cobaltUrlInput.value.trim().replace(/\/+$/, ''));
+      });
+    }
+
     // pause screen mirrors the latency slider
     const pauseSlider = $('pause-latency-slider');
     const pauseValue = $('pause-latency-value');

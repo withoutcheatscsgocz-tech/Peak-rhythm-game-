@@ -143,6 +143,10 @@
       <input type="text" id="player-name-input" class="text-input" maxlength="20" placeholder="PLAYER1234" data-i18n-placeholder="settings.playerNamePlaceholder">
     </label>
     <label class="setting-row">
+      <span data-i18n="settings.cobaltUrl">YouTube / Cobalt server URL <span style="font-size:0.75em;opacity:0.6">(optional, for reliable YouTube downloads)</span></span>
+      <input type="url" id="cobalt-url-input" class="text-input" placeholder="https://your-cobalt.onrender.com" autocomplete="off" autocapitalize="none" data-i18n-placeholder="settings.cobaltUrlPlaceholder">
+    </label>
+    <label class="setting-row">
       <span><span data-i18n="settings.rhythmFocus">Rhythm Focus:</span> <b id="vocal-focus-value">BALANCED</b></span>
       <input type="range" id="vocal-focus-slider" min="0" max="100" step="5" value="15">
     </label>
