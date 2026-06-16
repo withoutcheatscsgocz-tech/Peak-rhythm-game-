@@ -1185,7 +1185,7 @@ const App = (() => {
     }
   }
 
-  // ---------------- link (YouTube / Spotify desktop download) ----------------
+  // ---------------- link (YouTube / Spotify — desktop via IPC, mobile via Invidious) ----
 
   function openLinkScreen() {
     $('link-url-input').value = '';
@@ -1200,33 +1200,175 @@ const App = (() => {
     return analyzeAndShowResult(file);
   }
 
+  // --- mobile YouTube via public Invidious instances ---
+
+  const INVIDIOUS_INSTANCES = [
+    'https://inv.nadeko.net',
+    'https://y.com.sb',
+    'https://invidious.privacyredirect.com',
+    'https://iv.melmac.space',
+    'https://invidious.fdn.fr',
+  ];
+
+  function extractYouTubeId(url) {
+    const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  async function capFetch(url, opts = {}) {
+    const Cap = window.Capacitor;
+    if (Cap && Cap.Plugins && Cap.Plugins.CapacitorHttp) {
+      const res = await Cap.Plugins.CapacitorHttp.request({ method: 'GET', url, ...opts });
+      return res;
+    }
+    return null; // caller falls back to fetch()
+  }
+
+  async function fetchBuffer(url, onProgress) {
+    // 1) Try Capacitor native HTTP first (no CORS on Android)
+    const capRes = await capFetch(url, { responseType: 'arraybuffer' });
+    if (capRes) {
+      const d = capRes.data;
+      if (d instanceof ArrayBuffer) return new Uint8Array(d);
+      if (typeof d === 'string') {
+        const bin = atob(d);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      }
+    }
+    // 2) Browser fetch with streaming progress
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const total = parseInt(res.headers.get('content-length') || '0', 10);
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (total > 0 && onProgress) onProgress(0.3 + 0.65 * received / total);
+    }
+    const len = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(len);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+
+  async function downloadYouTubeMobile(url, onProgress) {
+    const vid = extractYouTubeId(url);
+    if (!vid) throw new Error('Cannot extract YouTube video ID from this URL');
+
+    let lastErr = null;
+    for (const inst of INVIDIOUS_INSTANCES) {
+      try {
+        const apiUrl = `${inst}/api/v1/videos/${vid}?local=true`;
+        let data;
+
+        const capRes = await capFetch(apiUrl, { responseType: 'json' });
+        if (capRes) {
+          data = typeof capRes.data === 'string' ? JSON.parse(capRes.data) : capRes.data;
+        } else {
+          const r = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
+          if (!r.ok) throw new Error(`API ${r.status}`);
+          data = await r.json();
+        }
+
+        const formats = (data.adaptiveFormats || []).filter(f => f.type?.startsWith('audio/'));
+        if (!formats.length) throw new Error('No audio formats found');
+
+        formats.sort((a, b) => {
+          const ao = a.type?.includes('opus') ? 1 : 0, bo = b.type?.includes('opus') ? 1 : 0;
+          return (bo - ao) || ((b.bitrate || 0) - (a.bitrate || 0));
+        });
+
+        const audioUrl = formats[0].url;
+        const title = data.title || 'YouTube audio';
+
+        if (onProgress) onProgress(0.15);
+        const bytes = await fetchBuffer(audioUrl, onProgress);
+        if (onProgress) onProgress(1);
+        return { data: bytes, name: title };
+      } catch (e) {
+        lastErr = e;
+        console.warn(`Invidious ${inst}:`, e.message);
+      }
+    }
+    throw new Error((lastErr && lastErr.message) || 'All YouTube sources failed — try the desktop version for reliable downloads');
+  }
+
+  async function downloadSpotifyMobile(url, onProgress) {
+    const m = url.match(/track\/([A-Za-z0-9]+)/);
+    if (!m) throw new Error('Cannot extract Spotify track ID');
+    const trackId = m[1];
+
+    const pageUrl = `https://open.spotify.com/track/${trackId}`;
+    if (onProgress) onProgress(0.1);
+
+    let html;
+    const capRes = await capFetch(pageUrl, { responseType: 'text', headers: { Accept: 'text/html' } });
+    if (capRes) {
+      html = capRes.data;
+    } else {
+      // CORS-blocked on web — fall through to error
+      throw new Error('Spotify preview requires the mobile app or desktop version');
+    }
+
+    const sm = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+    if (!sm) throw new Error('Spotify page structure changed — preview unavailable');
+
+    const pageData = JSON.parse(sm[1]);
+    const entity = pageData?.props?.pageProps?.state?.data?.entity
+      || pageData?.props?.pageProps?.serverData?.entity;
+    const previewUrl = entity?.audioPreview?.url;
+    if (!previewUrl) throw new Error('No 30-second preview available for this track');
+
+    if (onProgress) onProgress(0.3);
+    const bytes = await fetchBuffer(previewUrl, onProgress);
+    if (onProgress) onProgress(1);
+    return { data: bytes, name: (entity?.name || 'Spotify track') + ' (30s preview)' };
+  }
+
+  async function downloadLinkMobile(url, onProgress) {
+    if (/(?:youtube\.com|youtu\.be|music\.youtube\.com)/i.test(url))
+      return downloadYouTubeMobile(url, onProgress);
+    if (/open\.spotify\.com\/track\//i.test(url))
+      return downloadSpotifyMobile(url, onProgress);
+    // Generic direct audio URL
+    if (onProgress) onProgress(0.1);
+    const bytes = await fetchBuffer(url, onProgress);
+    if (onProgress) onProgress(1);
+    const ext = url.split('?')[0].split('.').pop() || 'mp3';
+    return { data: bytes, name: `audio.${ext}` };
+  }
+
   async function handleSubmitLink() {
     const url = ($('link-url-input').value || '').trim();
     if (!url) return;
 
-    const msg = $('link-msg');
-
-    if (!window.electronAPI) {
-      msg.textContent = I18N.t('link.desktopOnly', null, 'This feature requires the desktop (Windows) app.');
-      return;
-    }
-
-    msg.textContent = '';
+    $('link-msg').textContent = '';
     $('analyzing-title').textContent = I18N.t('link.downloading', null, 'DOWNLOADING...');
     $('analyze-file-name').textContent = url.length > 60 ? url.slice(0, 57) + '…' : url;
     $('analyze-pct').textContent = '0%';
     UI.showScreen('screen-analyzing', false);
 
-    window.electronAPI.onDownloadProgress((pct) => {
-      $('analyze-pct').textContent = Math.round(pct * 100) + '%';
-    });
+    const onProgress = (pct) => { $('analyze-pct').textContent = Math.round(pct * 100) + '%'; };
 
     try {
-      const result = await window.electronAPI.downloadAudio(url);
-      window.electronAPI.removeDownloadProgress();
+      let result;
+      if (window.electronAPI) {
+        window.electronAPI.onDownloadProgress(onProgress);
+        result = await window.electronAPI.downloadAudio(url);
+        window.electronAPI.removeDownloadProgress();
+      } else {
+        result = await downloadLinkMobile(url, onProgress);
+      }
       await analyzeFromBuffer(result.data, result.name || 'song.mp3');
     } catch (err) {
-      window.electronAPI.removeDownloadProgress();
+      if (window.electronAPI) window.electronAPI.removeDownloadProgress();
       UI.showToast(String(err.message || err));
       UI.resetNav();
       UI.showScreen('screen-link', false);

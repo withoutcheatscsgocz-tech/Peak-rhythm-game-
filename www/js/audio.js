@@ -418,6 +418,32 @@ const AudioEngine = (() => {
     const beatFold = foldAt(gameNov, beatPeriodFrames);
     let beatPhaseSec = (beatFold.phaseFrames * hopTime + ONSET_LATENCY_CORRECTION) % beatSec;
 
+    // Phase refinement: scan 64 candidate phases across one beat period and
+    // pick the one whose beat grid best captures the strongest raw onsets.
+    // Fixes the common ½-beat error where the fold peak lands on the snare
+    // (beats 2 & 4) rather than the kick (beats 1 & 3).
+    {
+      const steps = 64;
+      const hitWin = Math.min(beatSec * 0.12, 0.06); // ≤60 ms window around each grid line
+      const strength05 = rawOnsets.length ? rawOnsets.map(o => o.strength).sort((a, b) => b - a)[Math.floor(rawOnsets.length * 0.25)] : 0;
+      let baseScore = 0, bestScore = 0, bestPhase = beatPhaseSec;
+      for (let i = 0; i < steps; i++) {
+        const cand = (beatSec * i) / steps;
+        let score = 0;
+        for (const o of rawOnsets) {
+          if (o.strength < strength05) continue;
+          const off = ((o.time - cand) % beatSec + beatSec) % beatSec;
+          const dist = Math.min(off, beatSec - off);
+          if (dist < hitWin) score += o.strength * (1 - dist / hitWin);
+        }
+        if (i === 0 || Math.abs(cand - beatPhaseSec) < beatSec / steps) baseScore = score;
+        if (score > bestScore) { bestScore = score; bestPhase = cand; }
+      }
+      // Only update if the new phase is meaningfully better (20 %+ gain)
+      // to avoid chasing noise on songs where the fold result was already correct.
+      if (bestScore > baseScore * 1.20) beatPhaseSec = bestPhase;
+    }
+
     // ---- 5. grid snap (straightness-scaled) + spacing + strengths ----
     // Events stay at their TRUE detected times unless the song is clearly
     // grid-quantized, in which case we pull each onset onto the nearest

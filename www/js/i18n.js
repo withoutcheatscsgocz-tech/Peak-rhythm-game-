@@ -196,7 +196,7 @@ const I18N = (() => {
     'link.placeholder': 'Paste a YouTube or Spotify URL...',
     'link.play': 'PLAY',
     'link.downloading': 'DOWNLOADING...',
-    'link.desktopOnly': 'This feature requires the desktop (Windows) app.',
+    'link.desktopOnly': 'Unsupported URL. Try a YouTube or Spotify link.',
 
     'multiSelect.title': 'SELECT SONGS',
     'multiSelect.info': 'Choose 2 or more audio files',
@@ -385,7 +385,7 @@ const I18N = (() => {
     'link.placeholder': 'Vložte YouTube nebo Spotify odkaz...',
     'link.play': 'HRÁT',
     'link.downloading': 'STAHOVÁNÍ...',
-    'link.desktopOnly': 'Tato funkce vyžaduje desktopovou (Windows) aplikaci.',
+    'link.desktopOnly': 'Nepodporovaný odkaz. Zkus YouTube nebo Spotify link.',
 
     'multiSelect.title': 'VYBRAT PÍSNĚ',
     'multiSelect.info': 'Vyberte 2 nebo více audio souborů',
@@ -574,7 +574,7 @@ const I18N = (() => {
     'link.placeholder': 'Вставьте ссылку YouTube или Spotify...',
     'link.play': 'ИГРАТЬ',
     'link.downloading': 'ЗАГРУЗКА...',
-    'link.desktopOnly': 'Эта функция требует десктопного (Windows) приложения.',
+    'link.desktopOnly': 'Неподдерживаемая ссылка. Используйте YouTube или Spotify.',
 
     'multiSelect.title': 'ВЫБРАТЬ ПЕСНИ',
     'multiSelect.info': 'Выберите 2 или более аудиофайлов',
@@ -763,7 +763,7 @@ const I18N = (() => {
     'link.placeholder': 'YouTube- oder Spotify-Link einfügen...',
     'link.play': 'SPIELEN',
     'link.downloading': 'HERUNTERLADEN...',
-    'link.desktopOnly': 'Diese Funktion erfordert die Desktop-App (Windows).',
+    'link.desktopOnly': 'Nicht unterstützter Link. Versuche einen YouTube- oder Spotify-Link.',
 
     'multiSelect.title': 'SONGS AUSWÄHLEN',
     'multiSelect.info': 'Wähle 2 oder mehr Audiodateien',
@@ -952,7 +952,7 @@ const I18N = (() => {
     'link.placeholder': 'Pega un enlace de YouTube o Spotify...',
     'link.play': 'JUGAR',
     'link.downloading': 'DESCARGANDO...',
-    'link.desktopOnly': 'Esta función requiere la aplicación de escritorio (Windows).',
+    'link.desktopOnly': 'Enlace no compatible. Prueba un link de YouTube o Spotify.',
 
     'multiSelect.title': 'SELECCIONAR CANCIONES',
     'multiSelect.info': 'Elige 2 o más archivos de audio',
@@ -1141,7 +1141,7 @@ const I18N = (() => {
     'link.placeholder': 'Collez un lien YouTube ou Spotify...',
     'link.play': 'JOUER',
     'link.downloading': 'TÉLÉCHARGEMENT...',
-    'link.desktopOnly': 'Cette fonctionnalité nécessite l\'application de bureau (Windows).',
+    'link.desktopOnly': 'Lien non pris en charge. Essayez un lien YouTube ou Spotify.',
 
     'multiSelect.title': 'SÉLECTIONNER DES MORCEAUX',
     'multiSelect.info': 'Choisissez 2 fichiers audio ou plus',
@@ -1330,7 +1330,7 @@ const I18N = (() => {
     'link.placeholder': 'Wklej link YouTube lub Spotify...',
     'link.play': 'GRAJ',
     'link.downloading': 'POBIERANIE...',
-    'link.desktopOnly': 'Ta funkcja wymaga aplikacji na komputer (Windows).',
+    'link.desktopOnly': 'Nieobsługiwany link. Spróbuj podać link YouTube lub Spotify.',
 
     'multiSelect.title': 'WYBIERZ PIOSENKI',
     'multiSelect.info': 'Wybierz 2 lub więcej plików audio',
