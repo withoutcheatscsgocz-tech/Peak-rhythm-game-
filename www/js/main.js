@@ -1200,34 +1200,80 @@ const App = (() => {
     return analyzeAndShowResult(file);
   }
 
-  // --- mobile YouTube via public Invidious instances ---
+  // --- mobile YouTube: Cobalt cascade (primary) + Invidious (fallback) ---
+
+  // Community Cobalt instances (api v10). Cobalt resolves YouTube's cipher
+  // server-side and returns a CORS-friendly stream URL, so it works far more
+  // reliably than raw Invidious. Order = try until one responds.
+  const COBALT_INSTANCES = [
+    'https://cobalt-api.kwiatekmiki.com',
+    'https://capi.oki.gg',
+    'https://co.eepy.today',
+    'https://cobalt.255x.ru',
+    'https://nadeko.co',
+    'https://cobalt-backend.canine.tools', // requires API key — tried last
+  ];
 
   const INVIDIOUS_INSTANCES = [
     'https://inv.nadeko.net',
-    'https://y.com.sb',
+    'https://invidious.nerdvpn.de',
     'https://invidious.privacyredirect.com',
     'https://iv.melmac.space',
+    'https://invidious.f5.si',
     'https://invidious.fdn.fr',
   ];
 
   function extractYouTubeId(url) {
-    const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+    const m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([A-Za-z0-9_-]{11})/);
     return m ? m[1] : null;
   }
 
   async function capFetch(url, opts = {}) {
     const Cap = window.Capacitor;
     if (Cap && Cap.Plugins && Cap.Plugins.CapacitorHttp) {
-      const res = await Cap.Plugins.CapacitorHttp.request({ method: 'GET', url, ...opts });
-      return res;
+      return Cap.Plugins.CapacitorHttp.request({ method: 'GET', url, ...opts });
     }
     return null; // caller falls back to fetch()
+  }
+
+  // POST JSON via Capacitor native HTTP (no CORS) or browser fetch.
+  async function postJson(url, body, timeoutMs) {
+    const Cap = window.Capacitor;
+    if (Cap && Cap.Plugins && Cap.Plugins.CapacitorHttp) {
+      const res = await Cap.Plugins.CapacitorHttp.request({
+        method: 'POST', url, responseType: 'json',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        data: body, connectTimeout: timeoutMs,
+      });
+      return typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    }
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+    return r.json();
+  }
+
+  // Reject HTML/JSON error pages that masquerade as a successful download so
+  // the user sees "couldn't download" instead of a confusing decode failure.
+  function assertLooksLikeAudio(bytes) {
+    if (!bytes || bytes.length < 8 * 1024) {
+      throw new Error('Download too small — source returned an error page');
+    }
+    const c0 = bytes[0];
+    // '<' (HTML) or '{' / '[' (JSON) at the very start => not an audio container
+    if (c0 === 0x3c || c0 === 0x7b || c0 === 0x5b) {
+      throw new Error('Source returned a web page, not audio');
+    }
+    return bytes;
   }
 
   async function fetchBuffer(url, onProgress) {
     // 1) Try Capacitor native HTTP first (no CORS on Android)
     const capRes = await capFetch(url, { responseType: 'arraybuffer' });
-    if (capRes) {
+    if (capRes && capRes.status >= 200 && capRes.status < 400) {
       const d = capRes.data;
       if (d instanceof ArrayBuffer) return new Uint8Array(d);
       if (typeof d === 'string') {
@@ -1258,46 +1304,85 @@ const App = (() => {
     return out;
   }
 
-  async function downloadYouTubeMobile(url, onProgress) {
-    const vid = extractYouTubeId(url);
-    if (!vid) throw new Error('Cannot extract YouTube video ID from this URL');
+  // Ask a Cobalt instance to resolve a direct/tunnel audio URL.
+  async function cobaltResolve(pageUrl, onProgress) {
+    let lastErr = null;
+    for (const inst of COBALT_INSTANCES) {
+      try {
+        const data = await postJson(inst, {
+          url: pageUrl, downloadMode: 'audio', audioFormat: 'mp3',
+        }, 9000);
+        if (!data) throw new Error('empty response');
+        if (data.status === 'error') {
+          throw new Error((data.error && data.error.code) || 'cobalt error');
+        }
+        let streamUrl = null;
+        if (data.status === 'tunnel' || data.status === 'redirect') streamUrl = data.url;
+        else if (data.status === 'picker') streamUrl = data.audio || (data.picker && data.picker[0] && data.picker[0].url);
+        if (!streamUrl) throw new Error('no stream url');
+        if (onProgress) onProgress(0.2);
+        const bytes = await fetchBuffer(streamUrl, onProgress);
+        return assertLooksLikeAudio(bytes);
+      } catch (e) {
+        lastErr = e;
+        console.warn(`Cobalt ${inst}:`, e.message);
+      }
+    }
+    throw lastErr || new Error('all cobalt instances failed');
+  }
 
+  async function invidiousResolve(vid, onProgress) {
     let lastErr = null;
     for (const inst of INVIDIOUS_INSTANCES) {
       try {
         const apiUrl = `${inst}/api/v1/videos/${vid}?local=true`;
         let data;
-
-        const capRes = await capFetch(apiUrl, { responseType: 'json' });
-        if (capRes) {
+        const capRes = await capFetch(apiUrl, { responseType: 'json', connectTimeout: 8000 });
+        if (capRes && capRes.status >= 200 && capRes.status < 300) {
           data = typeof capRes.data === 'string' ? JSON.parse(capRes.data) : capRes.data;
+        } else if (capRes) {
+          throw new Error(`API ${capRes.status}`);
         } else {
           const r = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
           if (!r.ok) throw new Error(`API ${r.status}`);
           data = await r.json();
         }
-
-        const formats = (data.adaptiveFormats || []).filter(f => f.type?.startsWith('audio/'));
-        if (!formats.length) throw new Error('No audio formats found');
-
-        formats.sort((a, b) => {
-          const ao = a.type?.includes('opus') ? 1 : 0, bo = b.type?.includes('opus') ? 1 : 0;
-          return (bo - ao) || ((b.bitrate || 0) - (a.bitrate || 0));
-        });
-
-        const audioUrl = formats[0].url;
-        const title = data.title || 'YouTube audio';
-
+        const formats = (data.adaptiveFormats || []).filter(f => f.type && f.type.startsWith('audio/'));
+        if (!formats.length) throw new Error('no audio formats');
+        formats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
         if (onProgress) onProgress(0.15);
-        const bytes = await fetchBuffer(audioUrl, onProgress);
-        if (onProgress) onProgress(1);
-        return { data: bytes, name: title };
+        const bytes = await fetchBuffer(formats[0].url, onProgress);
+        return { bytes: assertLooksLikeAudio(bytes), title: data.title };
       } catch (e) {
         lastErr = e;
         console.warn(`Invidious ${inst}:`, e.message);
       }
     }
-    throw new Error((lastErr && lastErr.message) || 'All YouTube sources failed — try the desktop version for reliable downloads');
+    throw lastErr || new Error('all invidious instances failed');
+  }
+
+  async function downloadYouTubeMobile(url, onProgress) {
+    const vid = extractYouTubeId(url);
+    if (!vid) throw new Error('Could not read a YouTube video ID from that link');
+    const canonical = `https://www.youtube.com/watch?v=${vid}`;
+
+    // 1) Cobalt (most reliable)
+    try {
+      const bytes = await cobaltResolve(canonical, onProgress);
+      if (onProgress) onProgress(1);
+      return { data: bytes, name: 'YouTube audio' };
+    } catch (e) {
+      console.warn('Cobalt cascade failed:', e.message);
+    }
+    // 2) Invidious fallback
+    try {
+      const { bytes, title } = await invidiousResolve(vid, onProgress);
+      if (onProgress) onProgress(1);
+      return { data: bytes, name: title || 'YouTube audio' };
+    } catch (e) {
+      console.warn('Invidious cascade failed:', e.message);
+    }
+    throw new Error('YouTube download services are unavailable right now. Try again later, or download the file and use UPLOAD SONG.');
   }
 
   async function downloadSpotifyMobile(url, onProgress) {
@@ -1327,7 +1412,7 @@ const App = (() => {
     if (!previewUrl) throw new Error('No 30-second preview available for this track');
 
     if (onProgress) onProgress(0.3);
-    const bytes = await fetchBuffer(previewUrl, onProgress);
+    const bytes = assertLooksLikeAudio(await fetchBuffer(previewUrl, onProgress));
     if (onProgress) onProgress(1);
     return { data: bytes, name: (entity?.name || 'Spotify track') + ' (30s preview)' };
   }
@@ -1339,7 +1424,7 @@ const App = (() => {
       return downloadSpotifyMobile(url, onProgress);
     // Generic direct audio URL
     if (onProgress) onProgress(0.1);
-    const bytes = await fetchBuffer(url, onProgress);
+    const bytes = assertLooksLikeAudio(await fetchBuffer(url, onProgress));
     if (onProgress) onProgress(1);
     const ext = url.split('?')[0].split('.').pop() || 'mp3';
     return { data: bytes, name: `audio.${ext}` };
@@ -1361,8 +1446,16 @@ const App = (() => {
       let result;
       if (window.electronAPI) {
         window.electronAPI.onDownloadProgress(onProgress);
-        result = await window.electronAPI.downloadAudio(url);
-        window.electronAPI.removeDownloadProgress();
+        try {
+          result = await window.electronAPI.downloadAudio(url);
+        } catch (desktopErr) {
+          // ytdl-core can get rate-limited/blocked by YouTube; fall back to
+          // the same Cobalt/Invidious cascade the mobile build uses.
+          window.electronAPI.removeDownloadProgress();
+          console.warn('Desktop download failed, trying web cascade:', desktopErr.message);
+          result = await downloadLinkMobile(url, onProgress);
+        }
+        if (window.electronAPI) window.electronAPI.removeDownloadProgress();
       } else {
         result = await downloadLinkMobile(url, onProgress);
       }
