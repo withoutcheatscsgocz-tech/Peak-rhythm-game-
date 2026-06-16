@@ -1452,36 +1452,77 @@ const App = (() => {
     throw new Error('YouTube download services are unavailable right now. Try again later, or download the file and use UPLOAD SONG.');
   }
 
+  const WEB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+
+  function jsonStr(raw) {
+    if (raw == null) return '';
+    try { return JSON.parse('"' + raw + '"'); } catch (e) { return raw; }
+  }
+
+  async function fetchText(url, headers) {
+    const capRes = await capFetch(url, { responseType: 'text', headers: { 'User-Agent': WEB_UA, ...headers } });
+    if (capRes && capRes.status >= 200 && capRes.status < 300) return String(capRes.data);
+    if (capRes) throw new Error('HTTP ' + capRes.status);
+    const r = await fetch(url, { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }
+
+  // Pull title + primary artist (+ preview url) from Spotify's embed page,
+  // which still ships a parseable __NEXT_DATA__ blob.
+  async function spotifyMetadata(trackId) {
+    const html = await fetchText(`https://open.spotify.com/embed/track/${trackId}`);
+    const title = jsonStr((html.match(/"(?:name|title)":"([^"]{1,120})"/) || [])[1]);
+    const artist = jsonStr((html.match(/"artists":\[\{"name":"([^"]{1,120})"/) || [])[1]);
+    let preview = (html.match(/"audioPreview":\{"url":"([^"]+)"/) || [])[1] || '';
+    preview = preview.replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+    return { title, artist, preview };
+  }
+
+  // Scrape YouTube search results and return the first video ID.
+  async function youtubeSearchId(query) {
+    const html = await fetchText(
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+      { 'Accept-Language': 'en-US,en;q=0.9' }
+    );
+    const m = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
+    return m ? m[1] : null;
+  }
+
+  // Spotify → read metadata → find the song on YouTube → download the FULL
+  // track via the YouTube pipeline (same approach Spotify downloaders use).
+  // Falls back to Spotify's 30-second preview if no match/download works.
   async function downloadSpotifyMobile(url, onProgress) {
     const m = url.match(/track\/([A-Za-z0-9]+)/);
     if (!m) throw new Error('Cannot extract Spotify track ID');
-    const trackId = m[1];
 
-    const pageUrl = `https://open.spotify.com/track/${trackId}`;
-    if (onProgress) onProgress(0.1);
+    if (onProgress) onProgress(0.04);
+    const meta = await spotifyMetadata(m[1]);
+    if (!meta.title) throw new Error('Could not read this Spotify track');
+    const query = `${meta.artist} ${meta.title}`.trim();
 
-    let html;
-    const capRes = await capFetch(pageUrl, { responseType: 'text', headers: { Accept: 'text/html' } });
-    if (capRes) {
-      html = capRes.data;
-    } else {
-      // CORS-blocked on web — fall through to error
-      throw new Error('Spotify preview requires the mobile app or desktop version');
+    if (onProgress) onProgress(0.08);
+    let vid = null;
+    try { vid = await youtubeSearchId(query); } catch (e) { console.warn('YT search failed:', e.message); }
+
+    if (vid) {
+      try {
+        const res = await downloadYouTubeMobile(`https://www.youtube.com/watch?v=${vid}`, onProgress);
+        if (onProgress) onProgress(1);
+        return { data: res.data, name: query };
+      } catch (e) {
+        console.warn('Spotify→YouTube download failed, trying preview:', e.message);
+      }
     }
 
-    const sm = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
-    if (!sm) throw new Error('Spotify page structure changed — preview unavailable');
-
-    const pageData = JSON.parse(sm[1]);
-    const entity = pageData?.props?.pageProps?.state?.data?.entity
-      || pageData?.props?.pageProps?.serverData?.entity;
-    const previewUrl = entity?.audioPreview?.url;
-    if (!previewUrl) throw new Error('No 30-second preview available for this track');
-
-    if (onProgress) onProgress(0.3);
-    const bytes = assertLooksLikeAudio(await fetchBuffer(previewUrl, onProgress));
-    if (onProgress) onProgress(1);
-    return { data: bytes, name: (entity?.name || 'Spotify track') + ' (30s preview)' };
+    // fallback: 30-second preview
+    if (meta.preview) {
+      if (onProgress) onProgress(0.3);
+      const bytes = assertLooksLikeAudio(await fetchBuffer(meta.preview, onProgress));
+      if (onProgress) onProgress(1);
+      return { data: bytes, name: meta.title + ' (30s preview)' };
+    }
+    throw new Error('Could not find this song to download — try the YouTube link instead');
   }
 
   async function downloadLinkMobile(url, onProgress) {

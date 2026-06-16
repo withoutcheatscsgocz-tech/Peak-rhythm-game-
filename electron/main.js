@@ -183,33 +183,59 @@ function isSpotifyURL(url) {
   return /open\.spotify\.com\/track\//i.test(url);
 }
 
+function jsonStr(raw) {
+  if (raw == null) return '';
+  try { return JSON.parse('"' + raw + '"'); } catch (e) { return raw; }
+}
+
+async function spotifyMetadata(trackId) {
+  const html = (await httpsGet(`https://open.spotify.com/embed/track/${trackId}`)).toString('utf8');
+  const title = jsonStr((html.match(/"(?:name|title)":"([^"]{1,120})"/) || [])[1]);
+  const artist = jsonStr((html.match(/"artists":\[\{"name":"([^"]{1,120})"/) || [])[1]);
+  let preview = (html.match(/"audioPreview":\{"url":"([^"]+)"/) || [])[1] || '';
+  preview = preview.replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+  return { title, artist, preview };
+}
+
+async function youtubeSearchId(query) {
+  const html = (await httpsGet(
+    `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+    { headers: { 'Accept-Language': 'en-US,en;q=0.9' } }
+  )).toString('utf8');
+  const m = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
+  return m ? m[1] : null;
+}
+
+// Spotify → metadata → find on YouTube → download full track via ytmp3.
 async function downloadSpotify(url, sendProgress) {
   const match = url.match(/track\/([A-Za-z0-9]+)/);
   if (!match) throw new Error('Cannot extract Spotify track ID from URL');
-  const trackId = match[1];
 
-  sendProgress(0.1);
-  const html = (await httpsGet(`https://open.spotify.com/track/${trackId}`, {
-    headers: { Accept: 'text/html' },
-  })).toString('utf8');
+  sendProgress(0.05);
+  const meta = await spotifyMetadata(match[1]);
+  if (!meta.title) throw new Error('Could not read this Spotify track');
+  const query = `${meta.artist} ${meta.title}`.trim();
 
-  const scriptMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
-  if (!scriptMatch) throw new Error('Spotify page structure changed — preview unavailable');
+  sendProgress(0.08);
+  let vid = null;
+  try { vid = await youtubeSearchId(query); } catch (e) { console.warn('YT search failed:', e.message); }
 
-  const pageData = JSON.parse(scriptMatch[1]);
-  const entity =
-    pageData?.props?.pageProps?.state?.data?.entity ||
-    pageData?.props?.pageProps?.serverData?.entity;
-  const previewUrl = entity?.audioPreview?.url;
-  if (!previewUrl) throw new Error('No 30-second preview available for this track');
+  if (vid) {
+    try {
+      const res = await downloadYtmp3(`https://www.youtube.com/watch?v=${vid}`, sendProgress);
+      return { data: res.data, name: query };
+    } catch (e) {
+      console.warn('Spotify→YouTube download failed, trying preview:', e.message);
+    }
+  }
 
-  const title = (entity?.name || 'Spotify track') + ' (30s preview)';
-
-  sendProgress(0.3);
-  const audioData = await httpsGet(previewUrl);
-  sendProgress(1);
-
-  return { data: new Uint8Array(audioData), name: title };
+  if (meta.preview) {
+    sendProgress(0.3);
+    const audioData = await httpsGet(meta.preview);
+    sendProgress(1);
+    return { data: new Uint8Array(audioData), name: meta.title + ' (30s preview)' };
+  }
+  throw new Error('Could not find this song to download');
 }
 
 // ---- IPC handler ------------------------------------------------------------
