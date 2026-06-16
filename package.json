@@ -10,16 +10,17 @@
     "android": "cap open android",
     "build:android": "cap sync android",
     "electron": "electron .",
-    "dist:win": "electron-packager . \"ONE DOT\" --platform=win32 --arch=x64 --out=dist --overwrite --icon=electron/icon.ico --ignore=\"^/(android|dist|node_modules|\\.git|PUBLIC_LIBRARY_SETUP\\.sql)\""
+    "dist:win": "electron-packager . \"ONE DOT\" --platform=win32 --arch=x64 --out=dist --overwrite --icon=electron/icon.ico --ignore=\"^/(android|dist|\\.git|PUBLIC_LIBRARY_SETUP\\.sql|README\\.md|capacitor\\.config\\.json)\""
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.0",
-    "@capacitor/core": "^8.4.0",
-    "@capacitor/filesystem": "^8.1.2",
-    "@capacitor/share": "^8.0.1"
+    "@distube/ytdl-core": "^4.16.12"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.4.0",
     "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
     "electron": "^33.4.11",
     "electron-packager": "^17.1.2",
     "png-to-ico": "^2.1.8"

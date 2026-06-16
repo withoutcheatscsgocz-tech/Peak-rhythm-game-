@@ -142,6 +142,12 @@ const App = (() => {
       case 'pass-play':
         enterPassSetup();
         break;
+      case 'paste-link':
+        openLinkScreen();
+        break;
+      case 'submit-link':
+        handleSubmitLink();
+        break;
       case 'enter-challenge':
         UI.clearChallengeInput();
         UI.showScreen('screen-challenge-enter');
@@ -1176,6 +1182,54 @@ const App = (() => {
       playlist.index = 0;
       UI.populateModifiers();
       UI.showScreen('screen-modifiers');
+    }
+  }
+
+  // ---------------- link (YouTube / Spotify desktop download) ----------------
+
+  function openLinkScreen() {
+    $('link-url-input').value = '';
+    $('link-msg').textContent = '';
+    UI.showScreen('screen-link');
+    setTimeout(() => $('link-url-input').focus(), 100);
+  }
+
+  async function analyzeFromBuffer(arrayBuffer, name) {
+    const blob = new Blob([arrayBuffer], { type: 'audio/mpeg' });
+    const file = new File([blob], name, { type: 'audio/mpeg' });
+    return analyzeAndShowResult(file);
+  }
+
+  async function handleSubmitLink() {
+    const url = ($('link-url-input').value || '').trim();
+    if (!url) return;
+
+    const msg = $('link-msg');
+
+    if (!window.electronAPI) {
+      msg.textContent = I18N.t('link.desktopOnly', null, 'This feature requires the desktop (Windows) app.');
+      return;
+    }
+
+    msg.textContent = '';
+    $('analyzing-title').textContent = I18N.t('link.downloading', null, 'DOWNLOADING...');
+    $('analyze-file-name').textContent = url.length > 60 ? url.slice(0, 57) + '…' : url;
+    $('analyze-pct').textContent = '0%';
+    UI.showScreen('screen-analyzing', false);
+
+    window.electronAPI.onDownloadProgress((pct) => {
+      $('analyze-pct').textContent = Math.round(pct * 100) + '%';
+    });
+
+    try {
+      const result = await window.electronAPI.downloadAudio(url);
+      window.electronAPI.removeDownloadProgress();
+      await analyzeFromBuffer(result.data, result.name || 'song.mp3');
+    } catch (err) {
+      window.electronAPI.removeDownloadProgress();
+      UI.showToast(String(err.message || err));
+      UI.resetNav();
+      UI.showScreen('screen-link', false);
     }
   }
 

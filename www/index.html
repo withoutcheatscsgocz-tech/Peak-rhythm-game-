@@ -33,6 +33,7 @@
   <div class="menu-buttons" id="start-menu">
     <button class="btn focusable" data-action="tutorial" id="tutorial-btn" data-i18n="start.tutorial">HOW TO PLAY</button>
     <button class="btn focusable" data-action="upload-song" data-i18n="start.uploadSong">UPLOAD SONG</button>
+    <button class="btn focusable" data-action="paste-link" data-i18n="start.pasteLink">YOUTUBE / SPOTIFY LINK</button>
     <button class="btn focusable" data-action="upload-playlist" data-i18n="start.uploadPlaylist">UPLOAD PLAYLIST</button>
     <button class="btn focusable" data-action="endless-mode" data-i18n="start.endless">ENDLESS</button>
     <button class="btn focusable" data-action="pass-play" data-i18n="start.passPlay">PASS &amp; PLAY</button>
@@ -435,6 +436,19 @@
     </div>
   </div>
   <div id="public-library-list" class="grid-list library-list scroll-panel"></div>
+  <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
+</div>
+
+<!-- ====================== PASTE LINK (YouTube / Spotify) ====================== -->
+<div id="screen-link" class="screen">
+  <h2 data-i18n="link.title">PASTE LINK</h2>
+  <div class="panel">
+    <input type="url" id="link-url-input" class="text-input" placeholder="https://youtube.com/watch?v=... or spotify.com/track/..." autocomplete="off" autocapitalize="none" data-i18n-placeholder="link.placeholder">
+    <div class="challenge-msg" id="link-msg"></div>
+  </div>
+  <div class="menu-row">
+    <button class="btn focusable" data-action="submit-link" data-i18n="link.play">PLAY</button>
+  </div>
   <button class="btn ghost focusable" data-action="back" data-i18n="common.back">BACK</button>
 </div>
 

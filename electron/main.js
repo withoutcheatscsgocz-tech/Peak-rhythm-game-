@@ -1,6 +1,7 @@
-const { app, BrowserWindow, Menu, session } = require('electron');
+const { app, BrowserWindow, Menu, session, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 
 const WWW_DIR = path.join(__dirname, '..', 'www');
@@ -57,6 +58,128 @@ function startServer() {
   });
 }
 
+// ---- helpers ----------------------------------------------------------------
+
+function httpsGet(urlStr, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(urlStr, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        ...opts.headers,
+      },
+      ...opts,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return resolve(httpsGet(res.headers.location, opts));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Request timeout')); });
+  });
+}
+
+// ---- YouTube via ytdl-core --------------------------------------------------
+
+function isYouTubeURL(url) {
+  return /(?:youtube\.com|youtu\.be|music\.youtube\.com)/i.test(url);
+}
+
+async function downloadYouTube(url, sendProgress) {
+  const ytdl = require('@distube/ytdl-core');
+  const info = await ytdl.getInfo(url);
+  const title = info.videoDetails.title;
+
+  const format = ytdl.chooseFormat(info.formats, {
+    quality: 'highestaudio',
+    filter: 'audioonly',
+  });
+
+  const totalBytes = parseInt(format.contentLength || '0', 10);
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let received = 0;
+
+    const stream = ytdl.downloadFromInfo(info, { format });
+
+    stream.on('data', (chunk) => {
+      chunks.push(chunk);
+      received += chunk.length;
+      if (totalBytes > 0) sendProgress(Math.min(0.95, received / totalBytes));
+    });
+    stream.on('error', reject);
+    stream.on('end', () => {
+      sendProgress(1);
+      const buffer = Buffer.concat(chunks);
+      resolve({ data: new Uint8Array(buffer), name: title });
+    });
+  });
+}
+
+// ---- Spotify 30-second preview ----------------------------------------------
+
+function isSpotifyURL(url) {
+  return /open\.spotify\.com\/track\//i.test(url);
+}
+
+async function downloadSpotify(url, sendProgress) {
+  const match = url.match(/track\/([A-Za-z0-9]+)/);
+  if (!match) throw new Error('Cannot extract Spotify track ID from URL');
+  const trackId = match[1];
+
+  sendProgress(0.1);
+  const html = (await httpsGet(`https://open.spotify.com/track/${trackId}`, {
+    headers: { Accept: 'text/html' },
+  })).toString('utf8');
+
+  const scriptMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+  if (!scriptMatch) throw new Error('Spotify page structure changed — preview unavailable');
+
+  const pageData = JSON.parse(scriptMatch[1]);
+  const entity =
+    pageData?.props?.pageProps?.state?.data?.entity ||
+    pageData?.props?.pageProps?.serverData?.entity;
+  const previewUrl = entity?.audioPreview?.url;
+  if (!previewUrl) throw new Error('No 30-second preview available for this track');
+
+  const title = (entity?.name || 'Spotify track') + ' (30s preview)';
+
+  sendProgress(0.3);
+  const audioData = await httpsGet(previewUrl);
+  sendProgress(1);
+
+  return { data: new Uint8Array(audioData), name: title };
+}
+
+// ---- IPC handler ------------------------------------------------------------
+
+ipcMain.handle('download-audio', async (event, url) => {
+  const send = (pct) => {
+    try { event.sender.send('download-progress', pct); } catch (_) {}
+  };
+
+  if (isYouTubeURL(url)) {
+    return downloadYouTube(url, send);
+  }
+  if (isSpotifyURL(url)) {
+    return downloadSpotify(url, send);
+  }
+
+  // Generic direct audio URL fallback (.mp3 / .wav / .ogg / .m4a etc.)
+  send(0.1);
+  const data = await httpsGet(url);
+  send(1);
+  const ext = url.split('?')[0].split('.').pop() || 'mp3';
+  return { data: new Uint8Array(data), name: `audio.${ext}` };
+});
+
+// ---- window -----------------------------------------------------------------
+
 let mainWindow;
 let httpServer;
 
@@ -76,6 +199,7 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
